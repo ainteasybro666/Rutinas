@@ -13,8 +13,13 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.example.rutinas.R
 import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.ActionType
 import com.example.rutinas.domain.Routine
 import com.example.rutinas.util.NotificationReader // Assuming this exists
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -40,29 +45,37 @@ class RoutineExecutor(private val context: Context) {
 
 
     fun executeRoutine(routine: Routine, alarmId: Int) {
+        Timber.d("RoutineExecutor: executeRoutine called")
         Timber.i("RoutineExecutor: Executing routine: ${routine.name} (${routine.uuid}), triggered by alarmId: $alarmId")
 
-        val handler = Handler(Looper.getMainLooper()) // For TTS
-
-        routine.actions.forEach { action ->
-            Timber.d("RoutineExecutor: Executing action: ${action.type}, data: ${action.data}, action id: ${action.uuid}")
-            when (action.type) {
-                "ALARM" -> handleAlarmAction(action.data)
-                "ANNOUNCEMENT" -> handleAnnouncementAction(action.data, handler)
-                "BRIGHTNESS" -> handleBrightnessAction(action.data)
-                "READ_NOTIFICATIONS" -> handleReadNotificationsAction(action.data)
-                "SOUND_MODE" -> handleSoundModeAction(action.data)
-                "TIME" -> handleTimeAction(handler)
-                "VOLUME" -> handleVolumeAction(action.data)
-                "PAUSE" -> handlePauseAction(action.data)
-                else -> Timber.w("RoutineExecutor: Unknown action type: ${action.type}")
+        val handler = Handler(Looper.getMainLooper())
+        CoroutineScope(Dispatchers.Main).launch {
+            for (action in routine.actions) {
+                runCatching { executeAction(action, handler) }
+                    .onFailure { Timber.e(it, "Error executing action: $action") }
             }
+            Timber.i("RoutineExecutor: Finished executing routine: ${routine.name}")
         }
+    }
 
-        Timber.i("RoutineExecutor: Finished executing routine: ${routine.name}")
+    private suspend fun executeAction(action: Action, handler: Handler) {
+        Timber.d("RoutineExecutor: executeAction called")
+        Timber.d("RoutineExecutor: Executing action: ${action.type}, data: ${action.data}, action id: ${action.uuid}")
+        when (action.type) {
+            ActionType.ALARM -> handleAlarmAction(action.data)
+            ActionType.ANNOUNCEMENT -> handleAnnouncementAction(action.data, handler)
+            ActionType.BRIGHTNESS -> handleBrightnessAction(action.data)
+            ActionType.READ_NOTIFICATIONS -> handleReadNotificationsAction(action.data)
+            ActionType.SOUND_MODE -> handleSoundModeAction(action.data)
+            ActionType.TIME -> handleTimeAction(handler)
+            ActionType.VOLUME -> handleVolumeAction(action.data)
+            ActionType.PAUSE -> handlePauseAction(action)
+            else -> Timber.w("RoutineExecutor: Unknown action type: ${action.type}")
+        }
     }
 
     private fun handleAlarmAction(data: Map<String, Any>?) {
+        Timber.d("RoutineExecutor: handleAlarmAction called")
         val duration = (data?.get("duration") as? Number)?.toInt() ?: 30
         val repeatEnabled = data?.get("repeatEnabled") as? Boolean ?: false
 
@@ -72,18 +85,12 @@ class RoutineExecutor(private val context: Context) {
         //  - Vibrating the device
         //  - Showing a notification
         //  - Potentially scheduling a repeating alarm if repeatEnabled is true
-        // You'll likely need to use the AudioManager, Vibrator, and potentially the AlarmManager.
-        // Example (requires permissions in manifest):
-        //  val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        //  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        //      vibrator.vibrate(VibrationEffect.createOneShot(duration * 1000L, VibrationEffect.DEFAULT_AMPLITUDE))
-        //  } else {
-        //      vibrator.vibrate(duration * 1000L)
-        //  }
+        // You'll likely need to use the AudioManager, Vibrator, and potentially the AlarmManager.\n        // Example (requires permissions in manifest):\n        //  val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator\n        //  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {\n        //      vibrator.vibrate(VibrationEffect.createOneShot(duration * 1000L, VibrationEffect.DEFAULT_AMPLITUDE))\n        //  } else {\n        //      vibrator.vibrate(duration * 1000L)\n        //  }
     }
 
 
     private fun handleAnnouncementAction(data: Map<String, Any>?, handler: Handler) {
+        Timber.d("RoutineExecutor: handleAnnouncementAction called")
         val message = data?.get("message") as? String ?: ""
         // val volume = (data?.get("volume") as? Number)?.toInt() ?: 50  // Unused for now
 
@@ -100,6 +107,7 @@ class RoutineExecutor(private val context: Context) {
 
 
     private fun handleBrightnessAction(data: Map<String, Any>?) {
+        Timber.d("RoutineExecutor: handleBrightnessAction called")
         val brightness = (data?.get("brightness") as? Number)?.toInt() ?: 50
         val brightnessFloat = brightness / 100f
 
@@ -137,6 +145,7 @@ class RoutineExecutor(private val context: Context) {
     }
 
     private fun handleReadNotificationsAction(data: Map<String, Any>?) {
+        Timber.d("RoutineExecutor: handleReadNotificationsAction called")
         val excludedPackages = (data?.get("excludedPackages") as? String)
             ?.split(",")
             ?.map { it.trim() }
@@ -175,6 +184,7 @@ class RoutineExecutor(private val context: Context) {
 
 
     private fun handleSoundModeAction(data: Map<String, Any>?) {
+        Timber.d("RoutineExecutor: handleSoundModeAction called")
         val mode = data?.get("mode") as? String ?: "normal"
 
         Timber.i("RoutineExecutor: Adjusting SOUND_MODE action - mode: $mode")
@@ -200,6 +210,7 @@ class RoutineExecutor(private val context: Context) {
     }
 
     private fun handleTimeAction(handler: Handler) {
+        Timber.d("RoutineExecutor: handleTimeAction called")
         Timber.i("RoutineExecutor: Executing TIME action - reading current time")
         val calendar = Calendar.getInstance()
         val sdf = SimpleDateFormat("h:mm a", Locale.getDefault()) // Format: 3:20 PM
@@ -213,6 +224,7 @@ class RoutineExecutor(private val context: Context) {
 
 
     private fun handleVolumeAction(data: Map<String, Any>?) {
+        Timber.d("RoutineExecutor: handleVolumeAction called")
         Timber.i("RoutineExecutor: Adjusting VOLUME action - data: $data")
 
         try {
@@ -250,27 +262,15 @@ class RoutineExecutor(private val context: Context) {
         }
     }
 
-    private fun handlePauseAction(data: Map<String, Any>?) {
-        val duration = (data?.get("duration") as? Number)?.toLong() ?: 0L
-        val unit = data?.get("unit") as? String ?: "seconds"
-
-        val delayMillis = when (unit) {
-            "milliseconds" -> duration
-            "seconds" -> duration * 1000
-            "minutes" -> duration * 60 * 1000
-            else -> {
-                Timber.w("RoutineExecutor: Invalid pause unit: $unit. Defaulting to seconds.")
-                duration * 1000
-            }
-        }
-
-        Timber.i("RoutineExecutor: Executing PAUSE action - duration: $duration $unit (delay: $delayMillis ms)")
-
-        try {
-            Thread.sleep(delayMillis)
-        } catch (e: InterruptedException) {
-            Timber.e("RoutineExecutor: Pause interrupted: ${e.message}")
-            Thread.currentThread().interrupt()
+    private suspend fun handlePauseAction(action: Action) {
+        Timber.d("RoutineExecutor: handlePauseAction called")
+        val duration = action.pauseDuration
+        if (duration != null) {
+            Timber.i("RoutineExecutor: Pausing for $duration ms")
+            delay(duration)
+            Timber.i("RoutineExecutor: Pause completed")
+        } else {
+            Timber.w("RoutineExecutor: Pause duration not specified for action: $action")
         }
     }
 

@@ -48,10 +48,11 @@ class RoutineEditViewModel @Inject constructor(
     fun updateAction(updatedAction: Action) {
         Timber.d("Actualizando acción: $updatedAction")
         viewModelScope.launch {
-            repository.updateAction(updatedAction)
+            val actionToUpdate = updatedAction.copy(data = updatedAction.data, pauseDuration = updatedAction.pauseDuration)
+            repository.updateAction(actionToUpdate)
             _actions.update { currentActions ->
                 currentActions.map { action ->
-                    if (action.uuid == updatedAction.uuid) updatedAction else action
+                    if (action.uuid == updatedAction.uuid) actionToUpdate else action
                 }
             }
             Timber.d("Acción actualizada en la lista: ${_actions.value}")

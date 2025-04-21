@@ -28,11 +28,12 @@ data class Action(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     var uuid: String = UUID.randomUUID().toString(),
-    val type: String,
+    val type: ActionType,
     val routineId: Long,
     @ColumnInfo(name = "data")
     val data: @RawValue Map<String, Any> = emptyMap(),
-    val executionOrder: Int
+    val executionOrder: Int,
+    val pauseDuration: Long? = null
 ) : Parcelable {
 
     fun getString(key: String): String? = data[key] as? String
@@ -78,10 +79,10 @@ data class Action(
             actionType: ActionType,
             data: Map<String, Any>,
             executionOrder: Int
-        ): Action {
-            return Action(
+        ): Action {        
+            return Action (
                 routineId = routineId,
-                type = actionType.name,
+                type = actionType,
                 data = data,
                 executionOrder = executionOrder
             ).apply {
