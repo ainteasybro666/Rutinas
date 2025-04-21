@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
-    <MultiSelectListPreference
-        android:key="days_of_week"
-        android:title="Días de la semana"
-        android:entries="@array/days_of_week_entries"
-        android:entryValues="@array/days_of_week_values"
-        android:defaultValue="" />
-</PreferenceScreen>
