@@ -1,0 +1,3875 @@
+//RutinasApp.kt
+
+package com.example.rutinas  //Directamente en el paquete raíz
+
+import android.app.Application
+import dagger.hilt.android.HiltAndroidApp
+import timber.log.Timber
+
+@HiltAndroidApp
+class RutinasApp : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
+    }
+}
+
+//AppDatabase.kt
+
+package com.example.rutinas.data.local
+
+import androidx.room.Database
+import androidx.room.Embedded
+import androidx.room.Relation
+import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
+import com.example.rutinas.data.local.dao.ActionDao
+import com.example.rutinas.data.local.dao.RoutineDao
+import com.example.rutinas.data.local.dao.TriggerDao
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.Trigger
+import com.example.rutinas.data.model.RoutineEntity
+
+@Database(
+    entities = [RoutineEntity::class, Trigger::class, Action::class],
+    version = 2,
+    exportSchema = false  // ✅ Evita warnings de Room
+)
+@TypeConverters(Converters::class)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun routineDao(): RoutineDao
+    abstract fun triggerDao(): TriggerDao
+    abstract fun actionDao(): ActionDao
+}
+
+data class RoutineWithRelations(
+    @Embedded val routine: RoutineEntity,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "routineId",
+        entity = Trigger::class
+    )
+    val triggers: List<Trigger>,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "routineId",
+        entity = Action::class
+    )
+    val actions: List<Action>
+)
+
+//Converters.kt
+
+package com.example.rutinas.data.local
+
+import androidx.room.TypeConverter
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.example.rutinas.data.model.Action
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+
+class Converters {
+    private val gson = Gson()
+
+    @TypeConverter
+    fun fromTriggerData(json: String): Map<String, Any> {
+        return gson.fromJson(json, object : TypeToken<Map<String, Any>>() {}.type)
+    }
+
+    @TypeConverter
+    fun toTriggerData(data: Map<String, Any>): String {
+        return gson.toJson(data)
+    }
+
+    @TypeConverter
+    fun actionFromJson(json: String): Action = Gson().fromJson(json, Action::class.java)
+
+    @TypeConverter
+    fun actionToJson(action: Action): String = Gson().toJson(action)
+
+    private val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+
+    @TypeConverter
+    fun fromLocalDateTime(value: LocalDateTime?): String? {
+        return value?.format(formatter)
+    }
+
+    @TypeConverter
+    fun toLocalDateTime(value: String?): LocalDateTime? {
+        return value?.let { LocalDateTime.parse(it, formatter) }
+    }
+}
+
+
+//ActionDao.kt
+
+package com.example.rutinas.data.local.dao
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.Query
+import androidx.room.Update
+import com.example.rutinas.data.model.Action
+
+@Dao
+interface ActionDao {
+    @Insert
+    suspend fun insertAction(action: Action)
+
+    @Query("SELECT * FROM actions WHERE routineId = :routineId")
+    suspend fun getActionsForRoutine(routineId: Long): List<Action>
+
+    @Update
+    suspend fun updateActions(actions: List<Action>)
+
+    @Update
+    suspend fun updateAll(actions: List<Action>)
+}
+
+//RoutineDao.kt
+
+package com.example.rutinas.data.local.dao
+
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Transaction
+import androidx.room.Update
+import com.example.rutinas.data.local.RoutineWithRelations
+import com.example.rutinas.data.model.RoutineEntity
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface RoutineDao {
+        @Query("SELECT * FROM routines")
+        fun getAllRoutines(): Flow<List<RoutineEntity>>
+
+        @Insert(onConflict = OnConflictStrategy.REPLACE)
+        suspend fun insertRoutine(routine: RoutineEntity): Long
+
+        @Delete
+        suspend fun deleteRoutine(routine: RoutineEntity)
+
+        @Query("SELECT * FROM routines WHERE id = :routineId")
+        suspend fun getRoutineById(routineId: Long): RoutineEntity
+
+        @Query("UPDATE routines SET isEnabled = :isEnabled WHERE id = :routineId")
+        suspend fun updateEnabledStatus(routineId: Long, isEnabled: Boolean)
+
+        @Transaction
+        @Query("SELECT * FROM routines")
+        fun getRoutinesWithRelations(): Flow<List<RoutineWithRelations>>
+}
+
+//TriggerDao.kt
+
+package com.example.rutinas.data.local.dao
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.Query
+import com.example.rutinas.data.model.Trigger
+
+@Dao
+interface TriggerDao {
+    @Insert
+    suspend fun insertTrigger(trigger: Trigger)
+
+    @Query("SELECT * FROM triggers WHERE routineId = :routineId")
+    suspend fun getTriggersForRoutine(routineId: Long): List<Trigger>
+
+    // Añadir método para actualizar trigger si es necesario
+    @Query("UPDATE triggers SET trigger_data = :data WHERE id = :triggerId")
+    suspend fun updateTriggerData(triggerId: String, data: Map<String, Any>)
+}
+
+//Action.kt
+
+// Action.kt
+package com.example.rutinas.data.model
+
+import androidx.room.ColumnInfo
+import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
+import androidx.room.PrimaryKey
+import java.io.Serializable
+import java.util.UUID
+
+@Entity(
+    tableName = "actions",
+    foreignKeys = [ForeignKey(
+        entity = RoutineEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["routineId"],
+        onDelete = ForeignKey.CASCADE
+    )],
+    indices = [Index(value = ["routineId"], name = "idx_action_routine_id")]
+)
+data class Action(
+    @PrimaryKey
+    val id: String = UUID.randomUUID().toString(),
+    val routineId: Long,
+    @ColumnInfo(name = "type")
+    val type: String,
+    @ColumnInfo(name = "action_data")
+    val data: Map<String, Any>,
+    var executionOrder: Int
+) : Serializable { // <-- Agregado
+    // Propiedades calculadas para la UI
+    val title: String
+        get() = when (ActionType.fromString(type)) {
+            ActionType.ANNOUNCEMENT -> "Anuncio"
+            ActionType.ALARM -> "Alarma"
+            ActionType.NOTIFICATIONS -> "Leer Notificaciones"
+            ActionType.TIME -> "Decir Hora"
+            ActionType.VOLUME -> "Ajustar Volumen"
+            ActionType.BRIGHTNESS -> "Ajustar Brillo"
+            ActionType.SOUND_MODE -> "Modo de Sonido"
+        }
+
+    val description: String
+        get() = when (ActionType.fromString(type)) {
+            ActionType.ANNOUNCEMENT -> data["message"] as? String ?: "Sin mensaje"
+            ActionType.ALARM -> "Alarma: ${data["time"] ?: "No configurada"}"
+            ActionType.NOTIFICATIONS -> "Leer notificaciones activas"
+            ActionType.TIME -> "Informar hora actual"
+            ActionType.VOLUME -> {
+                val volumes = mutableListOf<String>()
+                if (data["mediaVolume"] != null) volumes.add("Media")
+                if (data["ringtoneVolume"] != null) volumes.add("Ringtone")
+                if (data["alarmVolume"] != null) volumes.add("Alarma")
+                "Ajustar volumen: ${volumes.joinToString(", ")}"
+            }
+            ActionType.BRIGHTNESS -> "Brillo: ${data["level"]}%"
+            ActionType.SOUND_MODE -> when (data["mode"]) {
+                "silent" -> "Modo silencioso"
+                "vibrate" -> "Modo vibración"
+                else -> "Modo no especificado"
+            }
+        }
+
+    companion object {
+        fun createAction(
+            routineId: Long,
+            actionType: ActionType,
+            data: Map<String, Any>,
+            executionOrder: Int
+        ): Action {
+            return Action(
+                routineId = routineId,
+                type = actionType.name,
+                data = data,
+                executionOrder = executionOrder
+            )
+        }
+    }
+}
+
+
+//ActionType.kt
+
+// ActionType.kt
+package com.example.rutinas.data.model
+
+enum class ActionType {
+    ANNOUNCEMENT,
+    ALARM,
+    NOTIFICATIONS,
+    TIME,
+    VOLUME,
+    BRIGHTNESS,
+    SOUND_MODE;
+
+    companion object {
+        fun fromString(type: String): ActionType {
+            return valueOf(type.uppercase())
+        }
+    }
+}
+
+//FrequencyType.kt
+
+package com.example.rutinas.data.model
+
+enum class FrequencyType {
+    ONCE,
+    WEEKLY,
+    MONTHLY
+}
+
+//RoutineEntity.kt
+
+package com.example.rutinas.data.model
+
+import androidx.room.Query
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import com.example.rutinas.domain.Routine
+import kotlinx.coroutines.flow.Flow
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+import java.time.LocalDateTime
+
+@Entity(tableName = "routines")
+data class RoutineEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val description: String? = null,
+    val isEnabled: Boolean = true,
+    val createdDate: LocalDateTime = LocalDateTime.now(),
+    )
+
+//Trigger.kt
+
+package com.example.rutinas.data.model
+
+import androidx.room.ColumnInfo
+import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
+import androidx.room.PrimaryKey
+import com.example.rutinas.data.model.RoutineEntity
+import java.util.UUID
+
+@Entity(
+    tableName = "triggers",
+    foreignKeys = [ForeignKey(
+        entity = RoutineEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["routineId"],
+        onDelete = ForeignKey.CASCADE
+    )],
+    indices = [Index(value = ["routineId"], name = "idx_trigger_routine_id")]
+
+)
+data class Trigger(
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val routineId: Long, // Changed to Long
+    val type: String,
+    @ColumnInfo(name = "trigger_data")
+    val data: Map<String, Any>
+)
+
+
+//RoutineRepository.kt
+
+package com.example.rutinas.data.repository
+
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.domain.Routine
+import com.example.rutinas.utils.Resource
+import kotlinx.coroutines.flow.Flow
+
+interface RoutineRepository {
+    fun getAllRoutines(): Flow<List<Routine>>
+    suspend fun saveRoutine(routine: Routine): Resource<Long>
+    suspend fun updateRoutineStatus(routineId: Long, isEnabled: Boolean)
+    suspend fun insertRoutine(routine: Routine)
+    suspend fun updateActions(actions: List<Action>)
+}
+
+//RoutineRepositoryImpl.kt
+
+package com.example.rutinas.data.repository
+
+import androidx.room.withTransaction
+import com.example.rutinas.data.local.AppDatabase
+import com.example.rutinas.data.local.RoutineWithRelations
+import com.example.rutinas.data.local.dao.RoutineDao
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.RoutineEntity
+import com.example.rutinas.data.model.Trigger
+import com.example.rutinas.domain.Routine
+import com.example.rutinas.utils.Resource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
+import timber.log.Timber
+import javax.inject.Inject
+
+class RoutineRepositoryImpl @Inject constructor(
+    private val db: AppDatabase
+) : RoutineRepository {
+
+    private val routineDao: RoutineDao = db.routineDao()
+
+    override suspend fun saveRoutine(routine: Routine): Resource<Long> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            db.withTransaction {
+                // 1. Insertar rutina principal
+                val routineEntity = RoutineEntity(
+                    id = routine.id,
+                    name = routine.name,
+                    description = routine.description,
+                    isEnabled = routine.isEnabled,
+                    createdDate = routine.createdDate
+                )
+                val routineId = routineDao.insertRoutine(routineEntity)
+
+                // 2. Insertar triggers
+                routine.triggers.forEach { trigger ->
+                    db.triggerDao().insertTrigger(trigger.copy(routineId = routineId))
+                }
+
+                // 3. Insertar acciones con orden
+                routine.actions.forEachIndexed { index, action ->
+                    db.actionDao().insertAction(action.copy(routineId = routineId, executionOrder = index))
+                }
+
+                Resource.Success(routineId)
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Error saving routine")
+            Resource.Error(e.localizedMessage ?: "Unknown error")
+        }
+    }
+
+    override fun getAllRoutines(): Flow<List<Routine>> {
+        return db.routineDao().getRoutinesWithRelations()
+            .map { routinesWithRelations ->
+                routinesWithRelations.map { it.toDomainModel() }
+            }
+    }
+
+    private fun RoutineWithRelations.toDomainModel() = Routine(
+        id = routine.id,
+        name = routine.name,
+        triggers = triggers,
+        actions = actions.sortedBy { it.executionOrder }
+    )
+
+    override suspend fun updateRoutineStatus(routineId: Long, isEnabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            routineDao.updateEnabledStatus(routineId, isEnabled)
+        }
+    }
+
+    override suspend fun insertRoutine(routine: Routine) {
+        saveRoutine(routine)
+    }
+
+    private fun RoutineEntity.toDomainModel(
+        triggers: List<Trigger>,
+        actions: List<Action>
+    ): Routine {
+        return Routine(
+            id = this.id,
+            name = this.name,
+            description = this.description,
+            isEnabled = this.isEnabled,
+            createdDate = this.createdDate,
+            triggers = triggers,
+            actions = actions
+        )
+    }
+
+    suspend fun updateActionsOrder(actions: List<Action>) {
+        db.withTransaction {
+            val updatedActions = actions.mapIndexed { index, action ->
+                action.copy(executionOrder = index)
+            }
+            db.actionDao().updateActions(updatedActions)
+        }
+    }
+    override suspend fun updateActions(actions: List<Action>) { // ✅ Implementa
+        db.actionDao().updateAll(actions)
+    }
+}
+
+
+//AppModule.kt
+
+package com.example.rutinas.di
+
+import android.content.Context
+import androidx.room.Room
+import com.example.rutinas.data.local.AppDatabase
+import com.example.rutinas.data.repository.RoutineRepository
+import com.example.rutinas.data.repository.RoutineRepositoryImpl
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
+import javax.inject.Singleton
+
+@Module
+@InstallIn(SingletonComponent::class)
+object AppModule {
+
+    @Provides
+    @Singleton
+    fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
+        return Room.databaseBuilder(
+            context,
+            AppDatabase::class.java,
+            "rutinas.db"
+        )
+            .fallbackToDestructiveMigration()
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideRoutineRepository(db: AppDatabase): RoutineRepository {
+        return RoutineRepositoryImpl(db)
+    }
+}
+
+//Routine.kt
+
+package com.example.rutinas.domain
+
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.Trigger
+import java.time.LocalDateTime
+
+data class Routine(
+    val id: Long = 0,
+    val name: String,
+    val description: String? = null,
+    val isEnabled: Boolean = true,
+    val createdDate: LocalDateTime = LocalDateTime.now(),
+    val triggers: List<Trigger> = emptyList(),
+    val actions: List<Action> = emptyList()
+)
+
+//NotificationService.kt
+
+package com.example.rutinas.service
+
+import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
+import timber.log.Timber
+
+class NotificationService : NotificationListenerService() {
+    companion object {
+        private const val TAG = "NotificationService"
+    }
+
+    override fun onNotificationPosted(sbn: StatusBarNotification) {
+        Timber.tag(TAG).d("Nueva notificación: ${sbn.packageName}")
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        Timber.tag(TAG).d("Notificación removida: ${sbn.packageName}")
+    }
+}
+
+//BaseActivity.kt
+
+package com.example.rutinas.ui.common
+
+import androidx.appcompat.app.AppCompatActivity
+import android.os.Bundle
+import androidx.viewbinding.ViewBinding
+import dagger.hilt.android.AndroidEntryPoint
+
+abstract class BaseActivity<VB : ViewBinding> : AppCompatActivity() {
+    protected lateinit var binding: VB
+    protected abstract fun inflateViewBinding(): VB
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = inflateViewBinding()
+        setContentView(binding.root)
+        setupViews()
+    }
+    protected abstract fun setupViews()
+}
+
+//BaseFragment.kt
+
+package com.example.rutinas.ui.common
+
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import androidx.viewbinding.ViewBinding
+import androidx.fragment.app.Fragment
+
+abstract class BaseFragment<VB : ViewBinding> : Fragment() {
+    private var _binding: VB? = null
+    protected val binding get() = _binding!!
+
+    abstract fun inflateBinding(
+        inflater: LayoutInflater,
+        container: ViewGroup?
+    ): VB
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        _binding = inflateBinding(inflater, container)
+        return binding.root
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
+    }
+}
+
+//RoutineEditFragment.kt
+
+package com.example.rutinas.ui.edit
+
+import android.content.res.Resources
+import android.graphics.Rect
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.example.rutinas.R
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.ActionType
+import com.example.rutinas.data.model.Trigger
+import com.example.rutinas.databinding.FragmentRoutineEditBinding
+import com.example.rutinas.ui.edit.actions.*
+import com.example.rutinas.ui.edit.dialogs.*
+import com.example.rutinas.ui.main.adapter.ActionAdapter
+import com.example.rutinas.ui.main.adapter.TriggerAdapter
+import com.example.rutinas.utils.PermissionManager
+import com.example.rutinas.utils.Resource
+import com.example.rutinas.utils.showErrorSnackbar
+import com.example.rutinas.utils.showSuccessSnackbar
+import com.google.android.material.snackbar.Snackbar
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import timber.log.Timber
+import java.time.LocalDateTime
+import javax.inject.Inject
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import com.example.rutinas.ui.common.BaseFragment
+import dagger.hilt.android.migration.CustomInjection.inject
+
+@AndroidEntryPoint // Solo en el Fragment concreto
+class RoutineEditFragment : BaseFragment<FragmentRoutineEditBinding>(),
+    TriggerTypeDialog.TriggerTypeListener,
+    TimeTriggerDialog.TimeTriggerListener,
+    CalendarTriggerDialog.CalendarTriggerListener,
+    LocationTriggerDialog.LocationTriggerListener {
+
+    @Inject lateinit var permissionManager: PermissionManager
+    private val viewModel: RoutineEditViewModel by viewModels()
+
+    private val triggersList = mutableListOf<Trigger>()
+    private lateinit var triggerAdapter: TriggerAdapter
+    private lateinit var actionAdapter: ActionAdapter
+
+    override fun inflateBinding(
+        inflater: LayoutInflater,
+        container: ViewGroup?
+    ): FragmentRoutineEditBinding {
+        return FragmentRoutineEditBinding.inflate(inflater, container, false)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        setupUI()
+        setupObservers()
+        setupTriggersRecyclerView()
+        setupActionsRecyclerView()
+    }
+
+    private fun setupUI() {
+        with(binding) {
+            toolbar.setNavigationIcon(R.drawable.ic_back)
+            toolbar.setNavigationOnClickListener { requireActivity().onBackPressed() }
+            toolbar.title = "Editar Rutina"
+
+            btnAddTrigger.setOnClickListener {
+                TriggerTypeDialog.newInstance().apply {
+                    setTriggerTypeListener(this@RoutineEditFragment)
+                    show(childFragmentManager, "TriggerTypeDialog")
+                }
+            }
+
+            btnAddAction.setOnClickListener { showAddActionDialog() }
+            btnSaveRoutine.setOnClickListener { saveRoutine() }
+        }
+    }
+
+    private fun setupTriggersRecyclerView() {
+        triggerAdapter = TriggerAdapter(
+            triggers = triggersList,
+            onTriggerDeleted = { trigger ->
+                triggersList.remove(trigger)
+                triggerAdapter.notifyDataSetChanged()
+                updateEmptyStateVisibility()
+            }
+        )
+
+        binding.rvTriggers.apply {
+            layoutManager = LinearLayoutManager(requireContext())
+            adapter = triggerAdapter
+            addItemDecoration(createItemDecoration())
+        }
+
+        updateEmptyStateVisibility() // Actualizar visibilidad inicial
+    }
+
+    private fun setupActionsRecyclerView() {
+        actionAdapter = ActionAdapter(
+            viewModel,
+            onActionDeleted = { action -> viewModel.removeAction(action) },
+            onActionClicked = ::navigateToEditAction
+        ).apply { attachTouchHelper(binding.rvActions) }
+
+        binding.rvActions.apply {
+            layoutManager = LinearLayoutManager(requireContext())
+            adapter = actionAdapter
+        }
+
+        updateEmptyStateVisibility() // Actualizar visibilidad inicial
+    }
+
+    private fun showAddActionDialog() {
+        AddActionDialogFragment.newInstance().apply {
+            setOnActionSelectedListener { navigateToEditAction(it) }
+            show(childFragmentManager, "AddActionDialog")
+        }
+    }
+
+    private fun navigateToEditAction(action: Action) {
+        val editFragment = when (action.type) {
+            ActionType.ALARM.name -> EditAlarmActionDialogFragment.newInstance(action)
+            ActionType.ANNOUNCEMENT.name -> EditAnnouncementActionDialogFragment.newInstance(action)
+            ActionType.BRIGHTNESS.name -> EditBrightnessActionDialogFragment.newInstance(action)
+            ActionType.VOLUME.name -> EditVolumeActionDialogFragment.newInstance(action)
+            ActionType.SOUND_MODE.name -> EditSoundModeActionDialogFragment.newInstance(action)
+            ActionType.TIME.name -> EditTimeActionDialogFragment.newInstance(action)
+            ActionType.NOTIFICATIONS.name -> EditReadNotificationsActionDialogFragment.newInstance(action)
+            else -> throw IllegalArgumentException("Tipo no soportado: ${action.type}")
+        }
+
+        (editFragment as? BaseEditActionDialogFragment)?.setOnActionUpdatedListener { updatedAction ->
+            viewModel.updateAction(updatedAction)
+        }
+
+        editFragment.show(childFragmentManager, "EditActionDialog")
+    }
+
+    private fun setupObservers() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.actions.collect { actions ->
+                    actionAdapter.submitList(actions)
+                    updateEmptyStateVisibility()
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            viewModel.saveResult.collect { result ->
+                when (result) {
+                    is Resource.Success<Long> -> {
+                        requireView().showSuccessSnackbar("Rutina guardada")
+                        requireActivity().onBackPressed()
+                    }
+                    is Resource.Error -> {
+                        requireView().showErrorSnackbar(result.message ?: "Error desconocido")
+                    }
+                    Resource.Loading -> {}
+                }
+            }
+        }
+    }
+
+    private fun saveRoutine() {
+        val name = binding.etRoutineName.text.toString().trim()
+        if (validateForm(name)) {
+            viewModel.saveRoutine(
+                name = name,
+                triggers = triggersList,
+                actions = viewModel.actions.value
+            )
+        }
+    }
+
+    private fun validateForm(name: String): Boolean {
+        var isValid = true
+
+        if (name.isEmpty()) {
+            binding.etRoutineName.error = "Nombre requerido"
+            isValid = false
+        }
+
+        if (triggersList.isEmpty()) {
+            requireView().showErrorSnackbar("Agrega al menos un trigger")
+            isValid = false
+        }
+
+        if (viewModel.actions.value.isNullOrEmpty()) {
+            requireView().showErrorSnackbar("Agrega al menos una acción")
+            isValid = false
+        }
+
+        return isValid
+    }
+
+    private fun updateEmptyStateVisibility() {
+        binding.apply {
+            val hasTriggers = triggersList.isNotEmpty()
+            val hasActions = !viewModel.actions.value.isNullOrEmpty()
+
+            rvTriggers.visibility = if (hasTriggers) View.VISIBLE else View.GONE
+            emptyStateTriggersGroup.visibility = if (hasTriggers) View.GONE else View.VISIBLE
+
+            rvActions.visibility = if (hasActions) View.VISIBLE else View.GONE
+            emptyStateActionsGroup.visibility = if (hasActions) View.GONE else View.VISIBLE
+
+            btnSaveRoutine.isEnabled = hasTriggers && hasActions
+        }
+    }
+
+    // region Trigger Listeners
+    override fun onTriggerSelected(triggerType: TriggerTypeDialog.TriggerType) {
+        when (triggerType) {
+            TriggerTypeDialog.TriggerType.TIME -> TimeTriggerDialog().apply {
+                setTimeTriggerListener(this@RoutineEditFragment)
+                show(childFragmentManager, "TimeTriggerDialog")
+            }
+            TriggerTypeDialog.TriggerType.CALENDAR -> CalendarTriggerDialog().apply {
+                setCalendarTriggerListener(this@RoutineEditFragment)
+                show(childFragmentManager, "CalendarTriggerDialog")
+            }
+            TriggerTypeDialog.TriggerType.LOCATION -> LocationTriggerDialog().apply {
+                setLocationTriggerListener(this@RoutineEditFragment)
+                show(childFragmentManager, "LocationTriggerDialog")
+            }
+        }
+    }
+
+    override fun onTimeTriggerConfigured(trigger: Trigger) {
+        triggersList.add(trigger)
+        triggerAdapter.notifyDataSetChanged()
+        updateEmptyStateVisibility()
+    }
+
+    override fun onCalendarTriggerConfigured(trigger: Trigger) {
+        triggersList.add(trigger)
+        triggerAdapter.notifyDataSetChanged()
+        updateEmptyStateVisibility()
+    }
+
+    override fun onLocationTriggerConfigured(trigger: Trigger) {
+        triggersList.add(trigger)
+        triggerAdapter.notifyDataSetChanged()
+        updateEmptyStateVisibility()
+    }
+    // endregion
+
+    // region Helpers
+    private fun createItemDecoration() = object : RecyclerView.ItemDecoration() {
+        override fun getItemOffsets(outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State) {
+            outRect.bottom = 16.dpToPx()
+        }
+    }
+
+    private fun Int.dpToPx(): Int = (this * Resources.getSystem().displayMetrics.density).toInt()
+
+    private fun hideBottomNavMenu() {
+        activity?.findViewById<View>(R.id.bottomNavigation)?.visibility = View.GONE
+    }
+
+    private fun showBottomNavMenu() {
+        activity?.findViewById<View>(R.id.bottomNavigation)?.visibility = View.VISIBLE
+    }
+
+    private fun hideFloatingButton() {
+        activity?.findViewById<View>(R.id.fab_add_routine)?.visibility = View.GONE
+    }
+
+    private fun showFloatingButton() {
+        activity?.findViewById<View>(R.id.fab_add_routine)?.visibility = View.VISIBLE
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        showBottomNavMenu()
+        showFloatingButton()
+        _binding = null
+    }
+    // endregion
+
+    override fun onPermissionGranted() {
+        // Implementación requerida
+    }
+}
+
+//RoutineEditViewModel.kt
+
+package com.example.rutinas.ui.edit
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.Trigger
+import com.example.rutinas.data.repository.RoutineRepository
+import com.example.rutinas.domain.Routine
+import com.example.rutinas.ui.viewmodel.BaseViewModel
+import com.example.rutinas.utils.Resource
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import java.time.LocalDateTime
+import javax.inject.Inject
+
+@HiltViewModel
+class RoutineEditViewModel @Inject constructor(
+    private val repository: RoutineRepository
+) : ViewModel() {
+
+    private val _actions = MutableStateFlow<List<Action>>(emptyList())
+    val actions: StateFlow<List<Action>> = _actions.asStateFlow()
+
+    private val _saveResult = MutableStateFlow<Resource<Long>?>(null)
+    val saveResult: StateFlow<Resource<Long>?> = _saveResult.asStateFlow()
+
+    fun updateAction(updatedAction: Action) {
+        viewModelScope.launch { // ✅ Agrega esto
+            _actions.update { currentActions ->
+                currentActions.map { action ->
+                    if (action.id == updatedAction.id) updatedAction else action
+                }
+            }
+            repository.updateActions(_actions.value)
+        }
+    }
+
+    fun updateActions(newActions: List<Action>) {
+        _actions.value = newActions
+        repository.updateActions(newActions)
+    }
+
+    fun removeAction(action: Action) {
+        _actions.update { it.filterNot { it.id == action.id } }
+    }
+
+    fun saveRoutine(name: String, triggers: List<Trigger>, actions: List<Action>) {
+        viewModelScope.launch {
+            try {
+                val result = repository.saveRoutine(name, triggers, actions)
+                _saveResult.value = Resource.Success(result)
+            } catch (e: Exception) {
+                _saveResult.value = Resource.Error(e.message)
+            }
+        } // ✅ Asegúrate de cerrar correctamente con '}'
+    }
+}
+
+//ActionEditorDialog.kt
+
+package com.example.rutinas.ui.edit.actions
+
+import com.example.rutinas.data.model.Action
+
+interface ActionEditorDialog {
+    fun setOnActionUpdatedListener(listener: (Action) -> Unit)
+}
+
+//BaseEditActionDialogFragment.kt
+
+// BaseEditActionDialogFragment.kt
+package com.example.rutinas.ui.edit.actions
+
+import android.app.Dialog
+import android.os.Bundle
+import android.view.ViewGroup
+import android.view.Window
+import androidx.fragment.app.DialogFragment
+import com.example.rutinas.data.model.Action
+import timber.log.Timber
+
+abstract class BaseEditActionDialogFragment : DialogFragment() {
+    companion object {
+        const val ARG_ACTION = "arg_action"
+    }
+
+    protected lateinit var action: Action
+
+    private var onActionUpdatedListener: ((Action) -> Unit)? = null
+
+    fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
+        onActionUpdatedListener = listener
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        try {
+            action = requireArguments().getSerializable(ARG_ACTION) as? Action
+                ?: throw IllegalArgumentException("Se requiere una instancia válida de Action en los argumentos usando la clave '$ARG_ACTION'.")
+            Timber.d("${this.javaClass.simpleName}: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
+        } catch (e: Exception) {
+            Timber.e("${this.javaClass.simpleName}: Error al obtener la acción - ${e.message}")
+            e.printStackTrace()
+            requireActivity().supportFragmentManager.popBackStack()
+        }
+    }
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        val dialog = super.onCreateDialog(savedInstanceState)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        return dialog
+    }
+
+    protected abstract fun saveAction()
+}
+
+//EditAlarmActionDialogFragment.kt
+
+package com.example.rutinas.ui.edit.actions
+
+import android.app.Dialog
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ArrayAdapter
+import androidx.appcompat.app.AlertDialog
+import androidx.fragment.app.DialogFragment
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.databinding.FragmentEditAlarmActionBinding
+import timber.log.Timber
+
+class EditAlarmActionDialogFragment : DialogFragment(), ActionEditorDialog {
+    private var _binding: FragmentEditAlarmActionBinding? = null
+    private val binding get() = _binding!!
+    private lateinit var action: Action
+    private var onActionUpdatedListener: ((Action) -> Unit)? = null
+
+    override fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
+        onActionUpdatedListener = listener
+    }
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        Timber.d("EditAlarmActionDialogFragment: onCreateDialog() llamado")
+        _binding = FragmentEditAlarmActionBinding.inflate(layoutInflater)
+
+        try {
+            action = requireArguments().getSerializable(ARG_ACTION) as? Action
+                ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
+
+            Timber.d("EditAlarmActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
+
+            setupUI()
+            loadActionData()
+        } catch (e: Exception) {
+            Timber.e("EditAlarmActionDialogFragment: Error al obtener la acción - ${e.message}")
+            e.printStackTrace()
+        }
+
+        val dialog = AlertDialog.Builder(requireContext())
+            .setView(binding.root)
+            .create()
+
+        dialog.setOnShowListener {
+            Timber.d("EditAlarmActionDialogFragment: Diálogo mostrado")
+        }
+
+        return dialog
+    }
+
+    private fun setupUI() {
+        Timber.d("EditAlarmActionDialogFragment: setupUI() llamado")
+        with(binding) {
+            // Configurar el adaptador del Spinner
+            val durations = listOf("10 segundos", "30 segundos", "1 minuto", "2 minutos", "5 minutos")
+            spinnerDuration.adapter = ArrayAdapter(
+                requireContext(),
+                android.R.layout.simple_spinner_dropdown_item,
+                durations
+            )
+
+            // Configurar el botón "Guardar"
+            btnSave.setOnClickListener {
+                Timber.d("EditAlarmActionDialogFragment: Botón Guardar pulsado")
+                saveAction()
+                dismiss()
+            }
+
+            // Configurar la flecha de retroceso
+            btnBack.setOnClickListener {
+                Timber.d("EditAlarmActionDialogFragment: Botón Volver pulsado")
+                dismiss()
+            }
+
+            // Configurar el switch de repetir
+            switchRepeat.setOnCheckedChangeListener { _, isChecked ->
+                Timber.d("EditAlarmActionDialogFragment: Switch Repetir cambiado a $isChecked")
+                repeatOptionsGroup.visibility = if (isChecked) View.VISIBLE else View.GONE
+            }
+        }
+    }
+
+    private fun loadActionData() {
+        Timber.d("EditAlarmActionDialogFragment: loadActionData() llamado")
+        try {
+            action.data.let { data ->
+                val duration = (data["duration"] as? Int) ?: 30
+                val repeatEnabled = (data["repeatEnabled"] as? Boolean) ?: false
+
+                Timber.d("EditAlarmActionDialogFragment: Datos cargados - duración: $duration, repetir: $repeatEnabled")
+
+                // Mapear el valor de duración al índice del Spinner
+                val durationValues = listOf(10, 30, 60, 120, 300)
+                val durationIndex = durationValues.indexOf(duration).takeIf { it != -1 } ?: 1
+                binding.spinnerDuration.setSelection(durationIndex)
+                binding.switchRepeat.isChecked = repeatEnabled
+                binding.repeatOptionsGroup.visibility = if (repeatEnabled) View.VISIBLE else View.GONE
+            }
+        } catch (e: Exception) {
+            Timber.e("EditAlarmActionDialogFragment: Error al cargar datos - ${e.message}")
+        }
+    }
+
+    private fun saveAction() {
+        Timber.d("EditAlarmActionDialogFragment: saveAction() llamado")
+        try {
+            val durationValues = listOf(10, 30, 60, 120, 300)
+            val durationIndex = binding.spinnerDuration.selectedItemPosition
+            val duration = durationValues[durationIndex]
+            val repeatEnabled = binding.switchRepeat.isChecked
+
+            Timber.d("EditAlarmActionDialogFragment: Guardando - duración: $duration, repetir: $repeatEnabled")
+
+            val updatedAction = action.copy(
+                data = mapOf(
+                    "duration" to duration,
+                    "repeatEnabled" to repeatEnabled
+                )
+            )
+            onActionUpdatedListener?.invoke(updatedAction)
+            Timber.d("EditAlarmActionDialogFragment: Acción actualizada y notificada")
+        } catch (e: Exception) {
+            Timber.e("EditAlarmActionDialogFragment: Error al guardar acción - ${e.message}")
+        }
+    }
+
+    override fun onDestroyView() {
+        Timber.d("EditAlarmActionDialogFragment: onDestroyView() llamado")
+        super.onDestroyView()
+        _binding = null
+    }
+
+    companion object {
+        private const val ARG_ACTION = "arg_action"
+
+        fun newInstance(action: Action): EditAlarmActionDialogFragment {
+            return EditAlarmActionDialogFragment().apply {
+                arguments = Bundle().apply {
+                    putSerializable(ARG_ACTION, action)
+                }
+            }
+        }
+    }
+}
+
+//EditAnnouncementActionDialogFragment.kt
+
+package com.example.rutinas.ui.edit.actions
+
+import android.app.Dialog
+import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.SeekBar
+import androidx.appcompat.app.AlertDialog
+import androidx.fragment.app.DialogFragment
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.databinding.FragmentEditAnnouncementActionBinding
+import timber.log.Timber
+
+class EditAnnouncementActionDialogFragment : DialogFragment(), ActionEditorDialog {
+    private var _binding: FragmentEditAnnouncementActionBinding? = null
+    private val binding get() = _binding!!
+    private lateinit var action: Action
+    private var onActionUpdatedListener: ((Action) -> Unit)? = null
+
+    override fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
+        onActionUpdatedListener = listener
+    }
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        Timber.d("EditAnnouncementActionDialogFragment: onCreateDialog() llamado")
+        _binding = FragmentEditAnnouncementActionBinding.inflate(layoutInflater)
+
+        try {
+            action = requireArguments().getSerializable(ARG_ACTION) as? Action
+                ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
+
+            Timber.d("EditAnnouncementActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
+
+            setupUI()
+            loadActionData()
+        } catch (e: Exception) {
+            Timber.e("EditAnnouncementActionDialogFragment: Error al obtener la acción - ${e.message}")
+            e.printStackTrace()
+        }
+
+        return AlertDialog.Builder(requireContext())
+            .setTitle("Configurar Anuncio")
+            .setView(binding.root)
+            .setPositiveButton("Guardar") { _, _ ->
+                Timber.d("EditAnnouncementActionDialogFragment: Botón Guardar pulsado")
+                saveAction()
+            }
+            .setNegativeButton("Cancelar") { _, _ ->
+                Timber.d("EditAnnouncementActionDialogFragment: Botón Cancelar pulsado")
+                dismiss()
+            }
+            .create()
+    }
+
+    private fun setupUI() {
+        Timber.d("EditAnnouncementActionDialogFragment: setupUI() llamado")
+        with(binding) {
+            sliderVolume.max = 100
+            sliderVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    Timber.d("EditAnnouncementActionDialogFragment: Volumen cambiado a $progress")
+                    // Actualizar el volumen
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+
+            etMessage.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: Editable?) {
+                    Timber.d("EditAnnouncementActionDialogFragment: Mensaje cambiado a ${s.toString()}")
+                    // Actualizar el mensaje
+                }
+            })
+
+            // Eliminamos el listener del botón ya que ahora usamos los botones del AlertDialog
+            btnSave.visibility = View.GONE
+        }
+    }
+
+    private fun loadActionData() {
+        Timber.d("EditAnnouncementActionDialogFragment: loadActionData() llamado")
+        try {
+            action.data.let { data ->
+                val message = data["message"] as? String ?: ""
+                val volume = (data["volume"] as? Int) ?: 50
+
+                Timber.d("EditAnnouncementActionDialogFragment: Datos cargados - mensaje: $message, volumen: $volume")
+
+                binding.etMessage.setText(message)
+                binding.sliderVolume.progress = volume
+            }
+        } catch (e: Exception) {
+            Timber.e("EditAnnouncementActionDialogFragment: Error al cargar datos - ${e.message}")
+        }
+    }
+
+    private fun saveAction() {
+        Timber.d("EditAnnouncementActionDialogFragment: saveAction() llamado")
+        try {
+            val message = binding.etMessage.text.toString()
+            val volume = binding.sliderVolume.progress
+
+            Timber.d("EditAnnouncementActionDialogFragment: Guardando - mensaje: $message, volumen: $volume")
+
+            val updatedAction = action.copy(
+                data = mapOf(
+                    "message" to message,
+                    "volume" to volume
+                )
+            )
+
+            onActionUpdatedListener?.invoke(updatedAction)
+            Timber.d("EditAnnouncementActionDialogFragment: Acción actualizada y notificada")
+        } catch (e: Exception) {
+            Timber.e("EditAnnouncementActionDialogFragment: Error al guardar acción - ${e.message}")
+        }
+    }
+
+    override fun onDestroyView() {
+        Timber.d("EditAnnouncementActionDialogFragment: onDestroyView() llamado")
+        super.onDestroyView()
+        _binding = null
+    }
+
+    companion object {
+        private const val ARG_ACTION = "arg_action"
+
+        fun newInstance(action: Action): EditAnnouncementActionDialogFragment {
+            return EditAnnouncementActionDialogFragment().apply {
+                arguments = Bundle().apply {
+                    putSerializable(ARG_ACTION, action)
+                }
+            }
+        }
+    }
+}
+
+//EditBrightnessActionDialogFragment.kt
+
+package com.example.rutinas.ui.edit.actions
+
+import android.app.Dialog
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.SeekBar
+import androidx.appcompat.app.AlertDialog
+import androidx.fragment.app.DialogFragment
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.databinding.FragmentEditBrightnessActionBinding
+import timber.log.Timber
+
+class EditBrightnessActionDialogFragment : DialogFragment(), ActionEditorDialog {
+    private var _binding: FragmentEditBrightnessActionBinding? = null
+    private val binding get() = _binding!!
+    private lateinit var action: Action
+    private var onActionUpdatedListener: ((Action) -> Unit)? = null
+
+    override fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
+        onActionUpdatedListener = listener
+    }
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        Timber.d("EditBrightnessActionDialogFragment: onCreateDialog() llamado")
+        _binding = FragmentEditBrightnessActionBinding.inflate(layoutInflater)
+
+        try {
+            action = requireArguments().getSerializable(ARG_ACTION) as? Action
+                ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
+
+            Timber.d("EditBrightnessActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
+
+            setupUI()
+            loadActionData()
+        } catch (e: Exception) {
+            Timber.e("EditBrightnessActionDialogFragment: Error al obtener la acción - ${e.message}")
+            e.printStackTrace()
+        }
+
+        return AlertDialog.Builder(requireContext())
+            .setTitle("Ajustar Brillo")
+            .setView(binding.root)
+            .setPositiveButton("Guardar") { _, _ ->
+                Timber.d("EditBrightnessActionDialogFragment: Botón Guardar pulsado")
+                saveAction()
+            }
+            .setNegativeButton("Cancelar") { _, _ ->
+                Timber.d("EditBrightnessActionDialogFragment: Botón Cancelar pulsado")
+                dismiss()
+            }
+            .create()
+    }
+
+    private fun setupUI() {
+        Timber.d("EditBrightnessActionDialogFragment: setupUI() llamado")
+        with(binding) {
+            seekBarBrightness.max = 100
+            seekBarBrightness.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    Timber.d("EditBrightnessActionDialogFragment: Brillo cambiado a $progress%")
+                    tvBrightnessValue.text = "Brillo: $progress%"
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+
+            btnPreview.setOnClickListener {
+                Timber.d("EditBrightnessActionDialogFragment: Botón Previsualizar pulsado")
+                previewBrightness()
+            }
+        }
+    }
+
+    private fun loadActionData() {
+        Timber.d("EditBrightnessActionDialogFragment: loadActionData() llamado")
+        try {
+            action.data.let { data ->
+                val brightness = (data["brightness"] as? Int) ?: 50
+
+                Timber.d("EditBrightnessActionDialogFragment: Datos cargados - brillo: $brightness%")
+
+                binding.seekBarBrightness.progress = brightness
+                binding.tvBrightnessValue.text = "Brillo: $brightness%"
+            }
+        } catch (e: Exception) {
+            Timber.e("EditBrightnessActionDialogFragment: Error al cargar datos - ${e.message}")
+        }
+    }
+
+    private fun previewBrightness() {
+        Timber.d("EditBrightnessActionDialogFragment: previewBrightness() llamado")
+        try {
+            val brightness = binding.seekBarBrightness.progress
+
+            // Aquí iría el código para previsualizar el brillo
+            // Por ejemplo, cambiar temporalmente el brillo de la pantalla
+
+            Timber.d("EditBrightnessActionDialogFragment: Previsualizando brillo al $brightness%")
+        } catch (e: Exception) {
+            Timber.e("EditBrightnessActionDialogFragment: Error al previsualizar brillo - ${e.message}")
+        }
+    }
+
+    private fun saveAction() {
+        Timber.d("EditBrightnessActionDialogFragment: saveAction() llamado")
+        try {
+            val brightness = binding.seekBarBrightness.progress
+
+            Timber.d("EditBrightnessActionDialogFragment: Guardando - brillo: $brightness%")
+
+            val updatedAction = action.copy(
+                data = mapOf(
+                    "brightness" to brightness
+                )
+            )
+
+            onActionUpdatedListener?.invoke(updatedAction)
+            Timber.d("EditBrightnessActionDialogFragment: Acción actualizada y notificada")
+        } catch (e: Exception) {
+            Timber.e("EditBrightnessActionDialogFragment: Error al guardar acción - ${e.message}")
+        }
+    }
+
+    override fun onDestroyView() {
+        Timber.d("EditBrightnessActionDialogFragment: onDestroyView() llamado")
+        super.onDestroyView()
+        _binding = null
+    }
+
+    companion object {
+        private const val ARG_ACTION = "arg_action"
+
+        fun newInstance(action: Action): EditBrightnessActionDialogFragment {
+            return EditBrightnessActionDialogFragment().apply {
+                arguments = Bundle().apply {
+                    putSerializable(ARG_ACTION, action)
+                }
+            }
+        }
+    }
+}
+
+//EditReadNotificationsActionDialogFragment.kt
+
+package com.example.rutinas.ui.edit.actions
+
+import android.app.Dialog
+import android.app.NotificationManager
+import android.content.Context
+import android.content.Intent
+import android.os.Bundle
+import android.provider.Settings
+import android.widget.SeekBar
+import androidx.appcompat.app.AlertDialog
+import androidx.fragment.app.DialogFragment
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.databinding.FragmentEditReadNotificationsActionBinding
+import com.example.rutinas.util.NotificationReader
+import com.google.android.material.snackbar.Snackbar
+import timber.log.Timber
+
+class EditReadNotificationsActionDialogFragment : DialogFragment() {
+    private var _binding: FragmentEditReadNotificationsActionBinding? = null
+    private val binding get() = _binding!!
+    private lateinit var notificationReader: NotificationReader
+    private lateinit var action: Action
+    private var onActionUpdatedListener: ((Action) -> Unit)? = null
+
+    fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
+        onActionUpdatedListener = listener
+    }
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        Timber.d("EditReadNotificationsActionDialogFragment: onCreateDialog() llamado")
+        _binding = FragmentEditReadNotificationsActionBinding.inflate(layoutInflater)
+
+        try {
+            action = requireArguments().getSerializable(ARG_ACTION) as? Action
+                ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
+
+            Timber.d("EditReadNotificationsActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
+
+            checkNotificationAccess()
+            setupNotificationReader()
+            setupUI()
+            loadActionData()
+        } catch (e: Exception) {
+            Timber.e("EditReadNotificationsActionDialogFragment: Error al obtener la acción - ${e.message}")
+            e.printStackTrace()
+        }
+
+        return AlertDialog.Builder(requireContext())
+            .setTitle("Leer Notificaciones")
+            .setView(binding.root)
+            .setPositiveButton("Guardar") { _, _ ->
+                saveAction()
+            }
+            .setNegativeButton("Cancelar", null)
+            .create()
+    }
+
+    private fun checkNotificationAccess() {
+        Timber.d("EditReadNotificationsActionDialogFragment: checkNotificationAccess() llamado")
+        val notificationManager =
+            requireContext().getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        if (!notificationManager.isNotificationListenerAccessGranted()) {
+            Timber.w("EditReadNotificationsActionDialogFragment: No hay acceso a las notificaciones")
+            Snackbar.make(
+                binding.root,
+                "Se requiere acceso a las notificaciones",
+                Snackbar.LENGTH_INDEFINITE
+            ).setAction("Configurar") {
+                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            }.show()
+        } else {
+            Timber.d("EditReadNotificationsActionDialogFragment: Acceso a notificaciones concedido")
+        }
+    }
+
+    private fun NotificationManager.isNotificationListenerAccessGranted(): Boolean {
+        val enabledListeners = Settings.Secure.getString(
+            context?.contentResolver,
+            "enabled_notification_listeners"
+        )
+        val myNotificationListenerClassName =
+            "${requireContext().packageName}/${NotificationReader::class.java.name}"
+        return enabledListeners?.contains(requireContext().packageName) == true
+    }
+
+    private fun setupNotificationReader() {
+        Timber.d("EditReadNotificationsActionDialogFragment: setupNotificationReader() llamado")
+        notificationReader = NotificationReader(requireContext())
+        notificationReader.initialize { success ->
+            if (!success) {
+                Timber.e("EditReadNotificationsActionDialogFragment: Error al inicializar el lector de texto")
+                Snackbar.make(
+                    binding.root,
+                    "Error al inicializar el lector de texto",
+                    Snackbar.LENGTH_SHORT
+                ).show()
+            } else {
+                Timber.d("EditReadNotificationsActionDialogFragment: Lector de texto inicializado correctamente")
+            }
+        }
+    }
+
+    private fun setupUI() {
+        Timber.d("EditReadNotificationsActionDialogFragment: setupUI() llamado")
+        with(binding) {
+            etPackagesToExclude.setText(getDefaultExcludedPackages())
+
+            seekBarDelay.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    Timber.d("EditReadNotificationsActionDialogFragment: Retraso cambiado a $progress segundos")
+                    tvDelayValue.text = "$progress segundos"
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+
+            btnPreview.setOnClickListener {
+                Timber.d("EditReadNotificationsActionDialogFragment: Botón Previsualizar pulsado")
+                previewNotificationReading()
+            }
+        }
+    }
+
+    private fun getDefaultExcludedPackages(): String {
+        Timber.d("EditReadNotificationsActionDialogFragment: getDefaultExcludedPackages() llamado")
+        return listOf(
+            "com.spotify.music",
+            "com.google.android.youtube",
+            "com.android.systemui",
+            "com.android.settings"
+        ).joinToString(", ")
+    }
+
+    private fun loadActionData() {
+        Timber.d("EditReadNotificationsActionDialogFragment: loadActionData() llamado")
+        try {
+            action.data["excludedPackages"]?.let { packages ->
+                if (packages is String) {
+                    Timber.d("EditReadNotificationsActionDialogFragment: Paquetes excluidos cargados: $packages")
+                    binding.etPackagesToExclude.setText(packages)
+                }
+            }
+
+            action.data["delay"]?.let { delay ->
+                if (delay is Int) {
+                    Timber.d("EditReadNotificationsActionDialogFragment: Retraso cargado: $delay segundos")
+                    binding.seekBarDelay.progress = delay
+                    binding.tvDelayValue.text = "$delay segundos"
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e("EditReadNotificationsActionDialogFragment: Error al cargar datos - ${e.message}")
+        }
+    }
+
+    private fun previewNotificationReading() {
+        Timber.d("EditReadNotificationsActionDialogFragment: previewNotificationReading() llamado")
+        val notificationManager =
+            requireContext().getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        if (!notificationManager.isNotificationListenerAccessGranted()) {
+            Timber.w("EditReadNotificationsActionDialogFragment: No hay acceso a las notificaciones para previsualizar")
+            Snackbar.make(
+                binding.root,
+                "Se requiere acceso a las notificaciones",
+                Snackbar.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        val excludedPackages = binding.etPackagesToExclude.text.toString()
+            .split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+        Timber.d("EditReadNotificationsActionDialogFragment: Paquetes excluidos para previsualización: $excludedPackages")
+
+        notificationManager.activeNotifications?.let { notifications ->
+            Timber.d("EditReadNotificationsActionDialogFragment: Leyendo ${notifications.size} notificaciones")
+            binding.btnPreview.isEnabled = false
+            notificationReader.readNotifications(notifications, excludedPackages) {
+                binding.btnPreview.isEnabled = true
+                Timber.d("EditReadNotificationsActionDialogFragment: Lectura de notificaciones completada")
+            }
+        }
+    }
+
+    private fun saveAction() {
+        Timber.d("EditReadNotificationsActionDialogFragment: saveAction() llamado")
+        try {
+            val excludedPackages = binding.etPackagesToExclude.text.toString()
+            val delay = binding.seekBarDelay.progress
+
+            Timber.d("EditReadNotificationsActionDialogFragment: Guardando - paquetes excluidos: $excludedPackages, retraso: $delay segundos")
+
+            val updatedAction = action.copy(
+                data = mapOf(
+                    "excludedPackages" to excludedPackages,
+                    "delay" to delay
+                )
+            )
+
+            onActionUpdatedListener?.invoke(updatedAction)
+            Timber.d("EditReadNotificationsActionDialogFragment: Acción actualizada y notificada")
+        } catch (e: Exception) {
+            Timber.e("EditReadNotificationsActionDialogFragment: Error al guardar acción - ${e.message}")
+        }
+    }
+
+    override fun onDestroyView() {
+        Timber.d("EditReadNotificationsActionDialogFragment: onDestroyView() llamado")
+        notificationReader.shutdown()
+        super.onDestroyView()
+        _binding = null
+    }
+
+    companion object {
+        private const val ARG_ACTION = "arg_action"
+
+        fun newInstance(action: Action): EditReadNotificationsActionDialogFragment {
+            return EditReadNotificationsActionDialogFragment().apply {
+                arguments = Bundle().apply {
+                    putSerializable(ARG_ACTION, action)
+                }
+            }
+        }
+    }
+}
+
+//EditSoundModeActionDialogFragment.kt
+
+package com.example.rutinas.ui.edit.actions
+
+import android.app.AlertDialog
+import android.app.Dialog
+import android.os.Bundle
+import androidx.fragment.app.DialogFragment
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.databinding.FragmentEditSoundModeActionBinding
+import timber.log.Timber
+
+class EditSoundModeActionDialogFragment : DialogFragment() {
+    private var _binding: FragmentEditSoundModeActionBinding? = null
+    private val binding get() = _binding!!
+    private lateinit var action: Action
+    private var onActionUpdatedListener: ((Action) -> Unit)? = null
+
+    fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
+        onActionUpdatedListener = listener
+    }
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        Timber.d("EditSoundModeActionDialogFragment: onCreateDialog() llamado")
+        _binding = FragmentEditSoundModeActionBinding.inflate(layoutInflater)
+
+        try {
+            action = requireArguments().getSerializable(ARG_ACTION) as? Action
+                ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
+
+            Timber.d("EditSoundModeActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
+
+            loadActionData()
+
+            return AlertDialog.Builder(requireContext())
+                .setTitle("Modo de Sonido")
+                .setView(binding.root)
+                .setPositiveButton("Guardar") { _, _ ->
+                    Timber.d("EditSoundModeActionDialogFragment: Botón Guardar pulsado")
+                    saveAction()
+                }
+                .setNegativeButton("Cancelar") { _, _ ->
+                    Timber.d("EditSoundModeActionDialogFragment: Botón Cancelar pulsado")
+                }
+                .create()
+        } catch (e: Exception) {
+            Timber.e("EditSoundModeActionDialogFragment: Error en onCreateDialog - ${e.message}")
+            e.printStackTrace()
+
+            // Crear un diálogo de error en caso de fallo
+            return AlertDialog.Builder(requireContext())
+                .setTitle("Error")
+                .setMessage("No se pudo cargar la acción: ${e.message}")
+                .setPositiveButton("Aceptar") { _, _ ->
+                    dismiss()
+                }
+                .create()
+        }
+    }
+
+    private fun loadActionData() {
+        Timber.d("EditSoundModeActionDialogFragment: loadActionData() llamado")
+        try {
+            action.data["mode"]?.let { mode ->
+                Timber.d("EditSoundModeActionDialogFragment: Modo cargado: $mode")
+                when (mode) {
+                    "silent" -> binding.radioSilent.isChecked = true
+                    "vibrate" -> binding.radioVibration.isChecked = true
+                    "normal" -> binding.radioNormal.isChecked = true
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e("EditSoundModeActionDialogFragment: Error al cargar datos - ${e.message}")
+        }
+    }
+
+    private fun saveAction() {
+        Timber.d("EditSoundModeActionDialogFragment: saveAction() llamado")
+        try {
+            val mode = when {
+                binding.radioSilent.isChecked -> "silent"
+                binding.radioVibration.isChecked -> "vibrate"
+                else -> "normal"
+            }
+
+            Timber.d("EditSoundModeActionDialogFragment: Guardando modo: $mode")
+
+            val updatedAction = action.copy(
+                data = mapOf("mode" to mode)
+            )
+
+            onActionUpdatedListener?.invoke(updatedAction)
+            Timber.d("EditSoundModeActionDialogFragment: Acción actualizada y notificada")
+        } catch (e: Exception) {
+            Timber.e("EditSoundModeActionDialogFragment: Error al guardar acción - ${e.message}")
+        }
+    }
+
+    override fun onDestroyView() {
+        Timber.d("EditSoundModeActionDialogFragment: onDestroyView() llamado")
+        super.onDestroyView()
+        _binding = null
+    }
+
+    companion object {
+        private const val ARG_ACTION = "arg_action"
+
+        fun newInstance(action: Action) = EditSoundModeActionDialogFragment().apply {
+            arguments = Bundle().apply {
+                putSerializable(ARG_ACTION, action)
+            }
+        }
+    }
+}
+
+//EditTimeActionDialogFragment.kt
+
+package com.example.rutinas.ui.edit.actions
+
+import android.app.AlertDialog
+import android.app.Dialog
+import android.os.Bundle
+import androidx.fragment.app.DialogFragment
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.databinding.FragmentEditTimeActionBinding
+import timber.log.Timber
+
+class EditTimeActionDialogFragment : DialogFragment() {
+    private var _binding: FragmentEditTimeActionBinding? = null
+    private val binding get() = _binding!!
+    private lateinit var action: Action
+    private var onActionUpdatedListener: ((Action) -> Unit)? = null
+
+    fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
+        onActionUpdatedListener = listener
+    }
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        Timber.d("EditTimeActionDialogFragment: onCreateDialog() llamado")
+        _binding = FragmentEditTimeActionBinding.inflate(layoutInflater)
+
+        try {
+            action = requireArguments().getSerializable(ARG_ACTION) as? Action
+                ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
+
+            Timber.d("EditTimeActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
+
+            setupUI()
+            loadActionData()
+
+            return AlertDialog.Builder(requireContext())
+                .setTitle("Configurar Hora")
+                .setView(binding.root)
+                .setPositiveButton("Guardar") { _, _ ->
+                    Timber.d("EditTimeActionDialogFragment: Botón Guardar pulsado")
+                    saveAction()
+                }
+                .setNegativeButton("Cancelar") { _, _ ->
+                    Timber.d("EditTimeActionDialogFragment: Botón Cancelar pulsado")
+                }
+                .create()
+        } catch (e: Exception) {
+            Timber.e("EditTimeActionDialogFragment: Error en onCreateDialog - ${e.message}")
+            e.printStackTrace()
+
+            // Crear un diálogo de error en caso de fallo
+            return AlertDialog.Builder(requireContext())
+                .setTitle("Error")
+                .setMessage("No se pudo cargar la acción: ${e.message}")
+                .setPositiveButton("Aceptar") { _, _ ->
+                    dismiss()
+                }
+                .create()
+        }
+    }
+
+    private fun setupUI() {
+        Timber.d("EditTimeActionDialogFragment: setupUI() llamado")
+        with(binding) {
+            radio12h.setOnCheckedChangeListener { _, isChecked ->
+                Timber.d("EditTimeActionDialogFragment: Radio 12h cambiado a $isChecked")
+                // Actualizar vista previa si es necesario
+            }
+            radio24h.setOnCheckedChangeListener { _, isChecked ->
+                Timber.d("EditTimeActionDialogFragment: Radio 24h cambiado a $isChecked")
+                // Actualizar vista previa si es necesario
+            }
+        }
+    }
+
+    private fun loadActionData() {
+        Timber.d("EditTimeActionDialogFragment: loadActionData() llamado")
+        try {
+            action.data.let { data ->
+                val timeFormat = data["timeFormat"] as? String ?: "24h"
+                Timber.d("EditTimeActionDialogFragment: Formato de hora cargado: $timeFormat")
+
+                binding.radio12h.isChecked = timeFormat == "12h"
+                binding.radio24h.isChecked = timeFormat == "24h"
+            }
+        } catch (e: Exception) {
+            Timber.e("EditTimeActionDialogFragment: Error al cargar datos - ${e.message}")
+        }
+    }
+
+    private fun saveAction() {
+        Timber.d("EditTimeActionDialogFragment: saveAction() llamado")
+        try {
+            val timeFormat = if (binding.radio12h.isChecked) "12h" else "24h"
+            Timber.d("EditTimeActionDialogFragment: Guardando formato de hora: $timeFormat")
+
+            val updatedAction = action.copy(
+                data = mapOf(
+                    "timeFormat" to timeFormat
+                )
+            )
+
+            onActionUpdatedListener?.invoke(updatedAction)
+            Timber.d("EditTimeActionDialogFragment: Acción actualizada y notificada")
+        } catch (e: Exception) {
+            Timber.e("EditTimeActionDialogFragment: Error al guardar acción - ${e.message}")
+        }
+    }
+
+    override fun onDestroyView() {
+        Timber.d("EditTimeActionDialogFragment: onDestroyView() llamado")
+        super.onDestroyView()
+        _binding = null
+    }
+
+    companion object {
+        private const val ARG_ACTION = "arg_action"
+
+        fun newInstance(action: Action) = EditTimeActionDialogFragment().apply {
+            arguments = Bundle().apply {
+                putSerializable(ARG_ACTION, action)
+            }
+        }
+    }
+}
+
+//EditVolumeActionDialogFragment.kt
+
+package com.example.rutinas.ui.edit.actions
+
+import android.app.AlertDialog
+import android.app.Dialog
+import android.os.Bundle
+import android.view.View
+import android.widget.SeekBar
+import android.widget.TextView
+import androidx.fragment.app.DialogFragment
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.databinding.FragmentEditVolumeActionBinding
+import timber.log.Timber
+
+class EditVolumeActionDialogFragment : DialogFragment() {
+    private var _binding: FragmentEditVolumeActionBinding? = null
+    private val binding get() = _binding!!
+    private lateinit var action: Action
+    private var onActionUpdatedListener: ((Action) -> Unit)? = null
+
+    fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
+        onActionUpdatedListener = listener
+    }
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        Timber.d("EditVolumeActionDialogFragment: onCreateDialog() llamado")
+        _binding = FragmentEditVolumeActionBinding.inflate(layoutInflater)
+
+        try {
+            action = requireArguments().getSerializable(ARG_ACTION) as? Action
+                ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
+
+            Timber.d("EditVolumeActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
+
+            setupUI()
+            loadActionData()
+
+            return AlertDialog.Builder(requireContext())
+                .setTitle("Ajustar Volumen")
+                .setView(binding.root)
+                .setPositiveButton("Guardar") { _, _ ->
+                    Timber.d("EditVolumeActionDialogFragment: Botón Guardar pulsado")
+                    saveAction()
+                }
+                .setNegativeButton("Cancelar") { _, _ ->
+                    Timber.d("EditVolumeActionDialogFragment: Botón Cancelar pulsado")
+                }
+                .create()
+        } catch (e: Exception) {
+            Timber.e("EditVolumeActionDialogFragment: Error en onCreateDialog - ${e.message}")
+            e.printStackTrace()
+
+            // Crear un diálogo de error en caso de fallo
+            return AlertDialog.Builder(requireContext())
+                .setTitle("Error")
+                .setMessage("No se pudo cargar la acción: ${e.message}")
+                .setPositiveButton("Aceptar") { _, _ ->
+                    dismiss()
+                }
+                .create()
+        }
+    }
+
+    private fun setupUI() {
+        Timber.d("EditVolumeActionDialogFragment: setupUI() llamado")
+        with(binding) {
+            cbVolumeMedia.setOnCheckedChangeListener { _, isChecked ->
+                Timber.d("EditVolumeActionDialogFragment: Checkbox Media cambiado a $isChecked")
+                seekBarMediaVolume.visibility = if (isChecked) View.VISIBLE else View.GONE
+            }
+            cbVolumeRingtone.setOnCheckedChangeListener { _, isChecked ->
+                Timber.d("EditVolumeActionDialogFragment: Checkbox Ringtone cambiado a $isChecked")
+                seekBarRingtoneVolume.visibility = if (isChecked) View.VISIBLE else View.GONE
+            }
+            cbVolumeAlarm.setOnCheckedChangeListener { _, isChecked ->
+                Timber.d("EditVolumeActionDialogFragment: Checkbox Alarm cambiado a $isChecked")
+                seekBarAlarmVolume.visibility = if (isChecked) View.VISIBLE else View.GONE
+            }
+
+            setupSeekBar(seekBarMediaVolume, tvMediaVolumeValue, "Media")
+            setupSeekBar(seekBarRingtoneVolume, tvRingtoneVolumeValue, "Ringtone")
+            setupSeekBar(seekBarAlarmVolume, tvAlarmVolumeValue, "Alarm")
+        }
+    }
+
+    private fun setupSeekBar(seekBar: SeekBar, textView: TextView, name: String) {
+        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                Timber.d("EditVolumeActionDialogFragment: SeekBar $name cambiado a $progress")
+                textView.text = "$progress%"
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+    }
+
+    private fun loadActionData() {
+        Timber.d("EditVolumeActionDialogFragment: loadActionData() llamado")
+        try {
+            action.data.let { data ->
+                with(binding) {
+                    data["mediaVolume"]?.let { volume ->
+                        val mediaVolume = (volume as? Number)?.toInt() ?: 50
+                        Timber.d("EditVolumeActionDialogFragment: Volumen Media cargado: $mediaVolume")
+                        cbVolumeMedia.isChecked = true
+                        seekBarMediaVolume.progress = mediaVolume
+                    }
+                    data["ringtoneVolume"]?.let { volume ->
+                        val ringtoneVolume = (volume as? Number)?.toInt() ?: 50
+                        Timber.d("EditVolumeActionDialogFragment: Volumen Ringtone cargado: $ringtoneVolume")
+                        cbVolumeRingtone.isChecked = true
+                        seekBarRingtoneVolume.progress = ringtoneVolume
+                    }
+                    data["alarmVolume"]?.let { volume ->
+                        val alarmVolume = (volume as? Number)?.toInt() ?: 50
+                        Timber.d("EditVolumeActionDialogFragment: Volumen Alarm cargado: $alarmVolume")
+                        cbVolumeAlarm.isChecked = true
+                        seekBarAlarmVolume.progress = alarmVolume
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e("EditVolumeActionDialogFragment: Error al cargar datos - ${e.message}")
+        }
+    }
+
+    private fun saveAction() {
+        Timber.d("EditVolumeActionDialogFragment: saveAction() llamado")
+        try {
+            val volumeData = mutableMapOf<String, Any>()
+            with(binding) {
+                if (cbVolumeMedia.isChecked) {
+                    volumeData["mediaVolume"] = seekBarMediaVolume.progress
+                    Timber.d("EditVolumeActionDialogFragment: Guardando volumen Media: ${seekBarMediaVolume.progress}")
+                }
+                if (cbVolumeRingtone.isChecked) {
+                    volumeData["ringtoneVolume"] = seekBarRingtoneVolume.progress
+                    Timber.d("EditVolumeActionDialogFragment: Guardando volumen Ringtone: ${seekBarRingtoneVolume.progress}")
+                }
+                if (cbVolumeAlarm.isChecked) {
+                    volumeData["alarmVolume"] = seekBarAlarmVolume.progress
+                    Timber.d("EditVolumeActionDialogFragment: Guardando volumen Alarm: ${seekBarAlarmVolume.progress}")
+                }
+            }
+
+            val updatedAction = action.copy(data = volumeData)
+            onActionUpdatedListener?.invoke(updatedAction)
+            Timber.d("EditVolumeActionDialogFragment: Acción actualizada y notificada")
+        } catch (e: Exception) {
+            Timber.e("EditVolumeActionDialogFragment: Error al guardar acción - ${e.message}")
+        }
+    }
+
+    override fun onDestroyView() {
+        Timber.d("EditVolumeActionDialogFragment: onDestroyView() llamado")
+        super.onDestroyView()
+        _binding = null
+    }
+
+    companion object {
+        private const val ARG_ACTION = "arg_action"
+
+        fun newInstance(action: Action) = EditVolumeActionDialogFragment().apply {
+            arguments = Bundle().apply {
+                putSerializable(ARG_ACTION, action)
+            }
+        }
+    }
+}
+
+//ActionSelectionDialog.kt
+
+package com.example.rutinas.ui.edit.dialogs
+
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.fragment.app.Fragment
+import com.example.rutinas.R
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.ActionType
+import com.example.rutinas.databinding.DialogActionSelectionBinding
+import timber.log.Timber
+import java.util.UUID
+
+class ActionSelectionDialog : Fragment() {
+    private var _binding: DialogActionSelectionBinding? = null
+    private val binding get() = _binding!!
+    private var onActionSelectedListener: ((Action) -> Unit)? = null
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        Timber.d("ActionSelectionDialog: onCreateView() llamado")
+        _binding = DialogActionSelectionBinding.inflate(inflater, container, false)
+        return binding.root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        Timber.d("ActionSelectionDialog: onViewCreated() llamado")
+        setupCategories(binding.categoriesContainer)
+    }
+
+    fun setupCategories(container: LinearLayout) {
+        Timber.d("ActionSelectionDialog: setupCategories() llamado")
+        try {
+            // Limpiar el contenedor
+            container.removeAllViews()
+
+            // Definir las categorías y acciones
+            val categories = listOf(
+                Category("Comunicación", listOf(
+                    ActionItem(ActionType.ANNOUNCEMENT.name, "Anuncio", R.drawable.ic_announcement),
+                    ActionItem(ActionType.NOTIFICATIONS.name, "Leer Notificaciones", R.drawable.ic_notifications)
+                )),
+                Category("Dispositivo", listOf(
+                    ActionItem(ActionType.BRIGHTNESS.name, "Ajustar Brillo", R.drawable.ic_brightness),
+                    ActionItem(ActionType.VOLUME.name, "Ajustar Volumen", R.drawable.ic_volume),
+                    ActionItem(ActionType.SOUND_MODE.name, "Modo de Sonido", R.drawable.ic_sound_mode)
+                )),
+                Category("Utilidades", listOf(
+                    ActionItem(ActionType.ALARM.name, "Alarma", R.drawable.ic_alarm),
+                    ActionItem(ActionType.TIME.name, "Decir la Hora", R.drawable.ic_time)
+                ))
+            )
+
+            // Inflar las categorías y acciones
+            val inflater = LayoutInflater.from(requireContext())
+            for (category in categories) {
+                Timber.d("ActionSelectionDialog: Inflando categoría: ${category.name}")
+                val categoryView = inflater.inflate(R.layout.item_category, container, false)
+                val categoryTitle = categoryView.findViewById<TextView>(R.id.categoryTitle)
+                val actionsContainer = categoryView.findViewById<LinearLayout>(R.id.actionsContainer)
+
+                categoryTitle.text = category.name
+                categoryTitle.setOnClickListener {
+                    Timber.d("ActionSelectionDialog: Categoría pulsada: ${category.name}")
+                    // Alternar visibilidad del contenedor de acciones
+                    actionsContainer.visibility = if (actionsContainer.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                }
+
+                // Inflar las acciones de esta categoría
+                for (action in category.actions) {
+                    Timber.d("ActionSelectionDialog: Inflando acción: ${action.name}")
+                    val actionView = inflater.inflate(R.layout.list_item_action, actionsContainer, false)
+                    val actionName = actionView.findViewById<TextView>(R.id.tvActionName)
+
+                    actionName.text = action.name
+                    actionName.setCompoundDrawablesWithIntrinsicBounds(action.iconResId, 0, 0, 0)
+
+                    actionView.setOnClickListener {
+                        Timber.d("ActionSelectionDialog: Acción seleccionada: ${action.name}")
+                        val newAction = Action(
+                            id = UUID.randomUUID().toString(),
+                            routineId = 0,
+                            type = action.type,
+                            data = emptyMap(),
+                            executionOrder = 0
+                        )
+                        onActionSelectedListener?.invoke(newAction)
+                    }
+
+                    actionsContainer.addView(actionView)
+                }
+
+                container.addView(categoryView)
+            }
+
+            Timber.d("ActionSelectionDialog: Categorías configuradas correctamente")
+        } catch (e: Exception) {
+            Timber.e("ActionSelectionDialog: Error al configurar categorías - ${e.message}")
+            e.printStackTrace()
+        }
+    }
+
+    fun setOnActionSelectedListener(listener: (Action) -> Unit) {
+        onActionSelectedListener = listener
+    }
+
+    override fun onDestroyView() {
+        Timber.d("ActionSelectionDialog: onDestroyView() llamado")
+        super.onDestroyView()
+        _binding = null
+    }
+
+    companion object {
+        fun newInstance(): ActionSelectionDialog {
+            return ActionSelectionDialog()
+        }
+    }
+
+    data class Category(val name: String, val actions: List<ActionItem>)
+    data class ActionItem(val type: String, val name: String, val iconResId: Int)
+}
+
+
+//AddActionDialogFragment.kt
+
+package com.example.rutinas.ui.edit.dialogs
+
+import android.app.Dialog
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.WindowManager
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
+import androidx.fragment.app.DialogFragment
+import com.example.rutinas.R
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.ActionType
+import com.example.rutinas.databinding.DialogActionSelectionBinding
+import timber.log.Timber
+import java.util.UUID
+
+class AddActionDialogFragment : DialogFragment() {
+    private var _binding: DialogActionSelectionBinding? = null
+    private val binding get() = _binding!!
+    private var onActionSelectedListener: ((Action) -> Unit)? = null
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        Timber.d("AddActionDialogFragment: onCreateDialog() llamado")
+        _binding = DialogActionSelectionBinding.inflate(layoutInflater)
+
+        // Crear el diálogo directamente con el contenido de selección de acciones
+        val dialog = AlertDialog.Builder(requireContext())
+            .setTitle("Seleccionar Acción")
+            .setView(binding.root)
+            .setNegativeButton("Cancelar") { _, _ ->
+                Timber.d("AddActionDialogFragment: Botón Cancelar pulsado")
+                dismiss()
+            }
+            .create()
+
+        // Configurar las categorías directamente en este diálogo
+        setupCategories()
+
+        dialog.window?.setLayout(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT
+        )
+
+        return dialog
+    }
+
+    private fun setupCategories() {
+        Timber.d("AddActionDialogFragment: setupCategories() llamado")
+        try {
+            // Verificar si el contenedor existe
+            if (binding.categoriesContainer == null) {
+                Timber.e("AddActionDialogFragment: El contenedor categoriesContainer es nulo")
+                return
+            }
+
+            // Limpiar el contenedor
+            binding.categoriesContainer.removeAllViews()
+
+            // Definir las categorías y acciones
+            val categories = listOf(
+                Category("Comunicación", listOf(
+                    ActionItem(ActionType.ANNOUNCEMENT.name, "Anuncio", R.drawable.ic_announcement),
+                    ActionItem(ActionType.NOTIFICATIONS.name, "Leer Notificaciones", R.drawable.ic_notifications)
+                )),
+                Category("Dispositivo", listOf(
+                    ActionItem(ActionType.BRIGHTNESS.name, "Ajustar Brillo", R.drawable.ic_brightness),
+                    ActionItem(ActionType.VOLUME.name, "Ajustar Volumen", R.drawable.ic_volume),
+                    ActionItem(ActionType.SOUND_MODE.name, "Modo de Sonido", R.drawable.ic_sound_mode)
+                )),
+                Category("Utilidades", listOf(
+                    ActionItem(ActionType.ALARM.name, "Alarma", R.drawable.ic_alarm),
+                    ActionItem(ActionType.TIME.name, "Decir la Hora", R.drawable.ic_time)
+                ))
+            )
+
+            // Inflar las categorías y acciones
+            val inflater = LayoutInflater.from(requireContext())
+            for (category in categories) {
+                Timber.d("AddActionDialogFragment: Inflando categoría: ${category.name}")
+                val categoryView = inflater.inflate(R.layout.item_category, binding.categoriesContainer, false)
+                val categoryTitle = categoryView.findViewById<TextView>(R.id.categoryTitle)
+                val actionsContainer = categoryView.findViewById<LinearLayout>(R.id.actionsContainer)
+
+                categoryTitle.text = category.name
+                categoryTitle.setOnClickListener {
+                    Timber.d("AddActionDialogFragment: Categoría pulsada: ${category.name}")
+                    // Alternar visibilidad del contenedor de acciones
+                    actionsContainer.visibility = if (actionsContainer.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                }
+
+                // Inflar las acciones de esta categoría
+                for (action in category.actions) {
+                    Timber.d("AddActionDialogFragment: Inflando acción: ${action.name}")
+                    val actionView = inflater.inflate(R.layout.list_item_action, actionsContainer, false)
+                    val actionName = actionView.findViewById<TextView>(R.id.tvActionName)
+
+                    actionName.text = action.name
+                    actionName.setCompoundDrawablesWithIntrinsicBounds(action.iconResId, 0, 0, 0)
+
+                    actionView.setOnClickListener {
+                        Timber.d("AddActionDialogFragment: Acción seleccionada: ${action.name}")
+                        val newAction = Action(
+                            id = UUID.randomUUID().toString(),
+                            routineId = 0,
+                            type = action.type,
+                            data = emptyMap(),
+                            executionOrder = 0
+                        )
+                        onActionSelectedListener?.invoke(newAction)
+                        dismiss()
+                    }
+
+                    actionsContainer.addView(actionView)
+                }
+
+                binding.categoriesContainer.addView(categoryView)
+            }
+
+            Timber.d("AddActionDialogFragment: Categorías configuradas correctamente")
+        } catch (e: Exception) {
+            Timber.e("AddActionDialogFragment: Error al configurar categorías - ${e.message}")
+            e.printStackTrace()
+        }
+    }
+
+    fun setOnActionSelectedListener(listener: (Action) -> Unit) {
+        onActionSelectedListener = listener
+    }
+
+    override fun onDestroyView() {
+        Timber.d("AddActionDialogFragment: onDestroyView() llamado")
+        super.onDestroyView()
+        _binding = null
+    }
+
+    companion object {
+        fun newInstance() = AddActionDialogFragment()
+    }
+
+    // Clases de datos para categorías y acciones
+    data class Category(val name: String, val actions: List<ActionItem>)
+    data class ActionItem(val type: String, val name: String, val iconResId: Int)
+}
+
+//BaseDialog.kt
+
+package com.example.rutinas.ui.edit.dialogs
+
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.Button
+import androidx.fragment.app.DialogFragment
+import com.example.rutinas.R
+
+abstract class BaseDialog : DialogFragment() {
+
+    protected abstract fun getLayoutResourceId(): Int
+    protected abstract fun setupUI(view: View)
+    protected abstract fun onConfirmClicked()
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        return inflater.inflate(getLayoutResourceId(), container, false)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        setupUI(view)
+        view.findViewById<Button>(R.id.btnConfirm)?.setOnClickListener {
+            onConfirmClicked()
+        }
+    }
+}
+
+//CalendarTriggerDialog.kt
+
+package com.example.rutinas.ui.edit.dialogs
+
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import androidx.fragment.app.DialogFragment
+import com.example.rutinas.data.model.Trigger
+import com.example.rutinas.databinding.DialogCalendarTriggerBinding
+import dagger.hilt.android.AndroidEntryPoint
+import java.util.UUID
+
+@AndroidEntryPoint
+class CalendarTriggerDialog : DialogFragment() {
+
+    interface CalendarTriggerListener {
+        fun onCalendarTriggerConfigured(trigger: Trigger)
+    }
+
+    private var listener: CalendarTriggerListener? = null
+    private lateinit var binding: DialogCalendarTriggerBinding
+
+    fun setCalendarTriggerListener(listener: CalendarTriggerListener) {
+        this.listener = listener
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        binding = DialogCalendarTriggerBinding.inflate(inflater, container, false)
+        return binding.root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        setupUI()
+    }
+
+    private fun setupUI() {
+        // El DatePicker suele inicializarse con la fecha actual.
+        binding.btnConfirm.setOnClickListener {
+            val day = binding.datePicker.dayOfMonth
+            val month = binding.datePicker.month
+            val year = binding.datePicker.year
+
+            val configData = mapOf("day" to day, "month" to month, "year" to year)
+            val trigger = Trigger(
+                id = UUID.randomUUID().toString(),
+                routineId = 0,
+                type = "CALENDAR",
+                data = configData
+            )
+            listener?.onCalendarTriggerConfigured(trigger)
+            dismiss()
+        }
+    }
+}
+
+//EditActionDialog.kt
+
+package com.example.rutinas.ui.edit.dialogs
+
+import android.app.AlertDialog
+import android.app.Dialog
+import android.os.Bundle
+import android.view.View
+import androidx.fragment.app.DialogFragment
+import com.example.rutinas.R
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.ActionType
+import com.example.rutinas.databinding.DialogEditActionBinding
+import com.example.rutinas.ui.edit.actions.BaseEditActionDialogFragment.Companion.ARG_ACTION
+import timber.log.Timber
+
+class EditActionDialog : DialogFragment() {
+    private var _binding: DialogEditActionBinding? = null
+    private val binding get() = _binding!!
+    private var onActionUpdatedListener: ((Action) -> Unit)? = null
+    private lateinit var action: Action
+
+    fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
+        onActionUpdatedListener = listener
+    }
+
+    /* Funciones de extensión para conversión segura */
+    private fun Any?.toIntSafe(default: Int = 0): Int {
+        return when (this) {
+            is String -> this.toIntOrNull() ?: default
+            is Number -> this.toInt()
+            else -> default
+        }
+    }
+
+    private fun Any?.toBooleanSafe(default: Boolean = false): Boolean {
+        return when (this) {
+            is Boolean -> this
+            is String -> this.toBoolean()
+            else -> default
+        }
+    }
+
+    private fun setupAlarmView() {
+        with(binding) {
+            action.data?.let { data ->
+                timePicker.hour = data["hour"].toIntSafe(8)
+                timePicker.minute = data["minute"].toIntSafe(0)
+                etAlarmLabel.setText((data["label"] as? String) ?: "")
+            } ?: run {
+                // Valores por defecto
+                timePicker.hour = 8
+                timePicker.minute = 0
+                etAlarmLabel.setText("")
+            }
+        }
+    }
+
+    private fun setupAnnouncementView() {
+        with(binding) {
+            action.data?.let { data ->
+                etAnnouncementMessage.setText((data["message"] as? String) ?: "")
+                sliderVolume.progress = data["volume"].toIntSafe(50)
+            } ?: run {
+                etAnnouncementMessage.setText("")
+                sliderVolume.progress = 50
+            }
+            sliderVolume.max = 100
+        }
+    }
+
+    private fun setupBrightnessView() {
+        with(binding) {
+            action.data?.let { data ->
+                sliderBrightness.progress = data["brightness"].toIntSafe(50)
+                switchAutomatic.isChecked = data["isAutomatic"].toBooleanSafe(false)
+            } ?: run {
+                sliderBrightness.progress = 50
+                switchAutomatic.isChecked = false
+            }
+            sliderBrightness.max = 100
+            switchAutomatic.setOnCheckedChangeListener { _, isChecked ->
+                sliderBrightness.isEnabled = !isChecked
+            }
+        }
+    }
+
+    private fun setupVolumeView() {
+        with(binding) {
+            action.data?.let { data ->
+                sliderVolume.progress = data["volume"].toIntSafe(50)
+                when ((data["streamType"] as? String)) {
+                    "ringtone" -> rbRingtone.isChecked = true
+                    "media" -> rbMedia.isChecked = true
+                    "alarm" -> rbAlarm.isChecked = true
+                    else -> rbRingtone.isChecked = true
+                }
+            } ?: run {
+                sliderVolume.progress = 50
+                rbRingtone.isChecked = true
+            }
+            sliderVolume.max = 100
+        }
+    }
+
+    private fun setupSoundModeView() {
+        with(binding) {
+            action.data?.let { data ->
+                when ((data["mode"] as? String)) {
+                    "normal" -> rbNormal.isChecked = true
+                    "silent" -> rbSilent.isChecked = true
+                    "vibrate" -> rbVibrate.isChecked = true
+                    else -> rbNormal.isChecked = true
+                }
+            } ?: run {
+                rbNormal.isChecked = true
+            }
+        }
+    }
+
+    private fun setupTimeView() {
+        with(binding) {
+            npHours.apply {
+                minValue = 0
+                maxValue = 23
+                value = action.data?.get("hours").toIntSafe(0)
+            }
+
+            npMinutes.apply {
+                minValue = 0
+                maxValue = 59
+                value = action.data?.get("minutes").toIntSafe(0)
+            }
+
+            npSeconds.apply {
+                minValue = 0
+                maxValue = 59
+                value = action.data?.get("seconds").toIntSafe(0)
+            }
+        }
+    }
+
+    // Actualizar el método onCreateDialog para usar estos métodos de configuración
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        _binding = DialogEditActionBinding.inflate(layoutInflater)
+        action = arguments?.getSerializable(ARG_ACTION) as Action
+            ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
+        Timber.d("Editando acción: ${action.type}, datos: ${action.data}")
+
+        // Ocultar todas las vistas primero
+        hideAllViews()
+
+        // Mostrar y configurar la vista correspondiente
+        when (action.type) {
+            ActionType.ALARM.name -> {
+                binding.layoutAlarm.visibility = View.VISIBLE
+                setupAlarmView()
+            }
+            ActionType.ANNOUNCEMENT.name -> {
+                binding.layoutAnnouncement.visibility = View.VISIBLE
+                setupAnnouncementView()
+            }
+            ActionType.BRIGHTNESS.name -> {
+                binding.layoutBrightness.visibility = View.VISIBLE
+                setupBrightnessView()
+            }
+            ActionType.VOLUME.name -> {
+                binding.layoutVolume.visibility = View.VISIBLE
+                setupVolumeView()
+            }
+            ActionType.SOUND_MODE.name -> {
+                binding.radioGroupSoundMode.visibility = View.VISIBLE
+                setupSoundModeView()
+            }
+            ActionType.TIME.name -> {
+                binding.layoutTime.visibility = View.VISIBLE
+                setupTimeView()
+            }
+        }
+
+        return AlertDialog.Builder(requireContext())
+            .setTitle(getActionTitle())
+            .setView(binding.root)
+            .setPositiveButton("Guardar") { _, _ ->
+                val updatedAction = getUpdatedAction()
+                onActionUpdatedListener?.invoke(updatedAction)
+                dismiss()
+            }
+            .setNegativeButton("Cancelar") { _, _ ->
+                dismiss()
+            }
+            .create()
+    }
+
+    private fun hideAllViews() {
+        with(binding) {
+            layoutAlarm.visibility = View.GONE
+            layoutAnnouncement.visibility = View.GONE
+            layoutBrightness.visibility = View.GONE
+            layoutVolume.visibility = View.GONE
+            radioGroupSoundMode.visibility = View.GONE
+            layoutTime.visibility = View.GONE
+        }
+    }
+
+    fun getActionTitle(): String {
+        return when (action.type) {
+            ActionType.ALARM.name -> "Configurar Alarma"
+            ActionType.ANNOUNCEMENT.name -> "Editar Anuncio"
+            ActionType.BRIGHTNESS.name -> "Ajustar Brillo"
+            ActionType.VOLUME.name -> "Ajustar Volumen"
+            ActionType.SOUND_MODE.name -> "Configurar Sonido"
+            ActionType.TIME.name -> "Configurar Tiempo"
+            else -> "Editar Acción"
+        }
+    }
+
+    private fun getUpdatedAction(): Action {
+        return when (action.type) {
+            ActionType.ALARM.name -> {
+                val hour = binding.timePicker.hour
+                val minute = binding.timePicker.minute
+                val label = binding.etAlarmLabel.text.toString()
+
+                action.copy(
+                    data = mapOf(
+                        "hour" to hour,
+                        "minute" to minute,
+                        "label" to label,
+                        "isEnabled" to true
+                    )
+                )
+            }
+            ActionType.ANNOUNCEMENT.name -> {
+                val message = binding.etAnnouncementMessage.text.toString()
+                val volume = binding.sliderVolume.progress
+
+                action.copy(
+                    data = mapOf(
+                        "message" to message,
+                        "volume" to volume
+                    )
+                )
+            }
+            ActionType.BRIGHTNESS.name -> {
+                val brightness = binding.sliderBrightness.progress
+
+                action.copy(
+                    data = mapOf(
+                        "brightness" to brightness,
+                        "isAutomatic" to binding.switchAutomatic.isChecked
+                    )
+                )
+            }
+            ActionType.VOLUME.name -> {
+                val volume = binding.sliderVolume.progress
+                val streamType = when (binding.radioGroupStream.checkedRadioButtonId) {
+                    R.id.rbRingtone -> "ringtone"
+                    R.id.rbMedia -> "media"
+                    R.id.rbAlarm -> "alarm"
+                    else -> "system"
+                }
+
+                action.copy(
+                    data = mapOf(
+                        "volume" to volume,
+                        "streamType" to streamType
+                    )
+                )
+            }
+            ActionType.SOUND_MODE.name -> {
+                val soundMode = when (binding.radioGroupSoundMode.checkedRadioButtonId) {
+                    R.id.rbNormal -> "normal"
+                    R.id.rbSilent -> "silent"
+                    R.id.rbVibrate -> "vibrate"
+                    else -> "normal"
+                }
+
+                action.copy(
+                    data = mapOf(
+                        "mode" to soundMode
+                    )
+                )
+            }
+            ActionType.TIME.name -> {
+                val hours = binding.npHours.value
+                val minutes = binding.npMinutes.value
+                val seconds = binding.npSeconds.value
+
+                action.copy(
+                    data = mapOf(
+                        "hours" to hours,
+                        "minutes" to minutes,
+                        "seconds" to seconds
+                    )
+                )
+            }
+            else -> action
+        }
+    }
+
+    companion object {
+        private const val ARG_ACTION = "arg_action"
+
+        fun newInstance(action: Action) = EditActionDialog().apply {
+            arguments = Bundle().apply {
+                putSerializable(ARG_ACTION, action)
+            }
+        }
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
+    }
+}
+
+//LocationTriggerDialog.kt
+
+package com.example.rutinas.ui.edit.dialogs
+
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import androidx.fragment.app.DialogFragment
+import com.example.rutinas.data.model.Trigger
+import com.example.rutinas.databinding.DialogLocationTriggerBinding
+import dagger.hilt.android.AndroidEntryPoint
+import java.util.UUID
+
+@AndroidEntryPoint
+class LocationTriggerDialog : DialogFragment() {
+
+    interface LocationTriggerListener {
+        fun onLocationTriggerConfigured(trigger: Trigger)
+    }
+
+    private var listener: LocationTriggerListener? = null
+    private lateinit var binding: DialogLocationTriggerBinding
+
+    fun setLocationTriggerListener(listener: LocationTriggerListener) {
+        this.listener = listener
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        binding = DialogLocationTriggerBinding.inflate(inflater, container, false)
+        return binding.root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        setupUI()
+    }
+
+    private fun setupUI() {
+        binding.btnConfirm.setOnClickListener {
+            val latitudeText = binding.etLatitude.text.toString()
+            val longitudeText = binding.etLongitude.text.toString()
+            val latitude = latitudeText.toDoubleOrNull() ?: 0.0
+            val longitude = longitudeText.toDoubleOrNull() ?: 0.0
+
+            val configData = mapOf("latitude" to latitude, "longitude" to longitude)
+            val trigger = Trigger(
+                id = UUID.randomUUID().toString(),
+                routineId = 0,
+                type = "LOCATION",
+                data = configData
+            )
+            listener?.onLocationTriggerConfigured(trigger)
+            dismiss()
+        }
+    }
+}
+
+//TimeTriggerDialog.kt
+
+package com.example.rutinas.ui.edit.dialogs
+
+import android.os.Build
+import android.view.View
+import android.widget.ArrayAdapter
+import android.widget.CheckBox
+import android.widget.Spinner
+import android.widget.TimePicker
+import android.widget.Toast
+import com.example.rutinas.R
+import com.example.rutinas.data.model.Trigger
+
+class TimeTriggerDialog : BaseDialog() {
+
+    private var listener: TimeTriggerListener? = null
+
+    fun setTimeTriggerListener(listener: TimeTriggerListener) {
+        this.listener = listener
+    }
+
+    override fun getLayoutResourceId(): Int = R.layout.dialog_time_trigger
+
+    override fun setupUI(view: View) {
+        // Configurar el Spinner de frecuencias con algunas opciones
+        val frequencySpinner: Spinner = view.findViewById(R.id.frequencySpinner)
+        val frequencies = listOf("ONCE", "DIARIO", "SEMANAL", "MENSUAL")
+        val adapter = ArrayAdapter(view.context, android.R.layout.simple_spinner_item, frequencies)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        frequencySpinner.adapter = adapter
+
+        // Opcional: configurar parámetros del TimePicker, etc.
+    }
+
+    override fun onConfirmClicked() {
+        val timePicker: TimePicker = requireView().findViewById(R.id.timePicker)
+        val hour = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) timePicker.hour
+        else timePicker.currentHour
+        val minute = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) timePicker.minute
+        else timePicker.currentMinute
+
+        val frequencySpinner: Spinner = requireView().findViewById(R.id.frequencySpinner)
+        val frequency = frequencySpinner.selectedItem?.toString() ?: "ONCE"
+
+        // Compilamos la lista de días seleccionados con base en los CheckBox
+        val selectedDays = mutableListOf<Int>()
+        if (requireView().findViewById<CheckBox>(R.id.checkBoxMonday).isChecked) selectedDays.add(1)
+        if (requireView().findViewById<CheckBox>(R.id.checkBoxTuesday).isChecked) selectedDays.add(2)
+        if (requireView().findViewById<CheckBox>(R.id.checkBoxWednesday).isChecked) selectedDays.add(3)
+        if (requireView().findViewById<CheckBox>(R.id.checkBoxThursday).isChecked) selectedDays.add(4)
+        if (requireView().findViewById<CheckBox>(R.id.checkBoxFriday).isChecked) selectedDays.add(5)
+        if (requireView().findViewById<CheckBox>(R.id.checkBoxSaturday).isChecked) selectedDays.add(6)
+        if (requireView().findViewById<CheckBox>(R.id.checkBoxSunday).isChecked) selectedDays.add(7)
+
+        // Validar que se haya seleccionado al menos un día de la semana
+        if (selectedDays.isEmpty()) {
+            Toast.makeText(requireContext(), "Debe seleccionar al menos un día de la semana", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Crear el trigger con la información recopilada; ajusta los campos según tu modelo (aquí routineId se pasa como 0)
+        val triggerData = mapOf(
+            "hour" to hour,
+            "minute" to minute,
+            "frequency" to frequency,
+            "selectedDays" to selectedDays
+        )
+        val trigger = Trigger(routineId = 0, type = "TIME", data = triggerData)
+        listener?.onTimeTriggerConfigured(trigger)
+        dismiss()
+    }
+
+    interface TimeTriggerListener {
+        fun onTimeTriggerConfigured(trigger: Trigger)
+    }
+}
+
+//TriggerTypeDialog.kt
+
+package com.example.rutinas.ui.edit.dialogs
+
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import androidx.fragment.app.DialogFragment
+import com.example.rutinas.databinding.DialogTriggerTypesBinding
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
+class TriggerTypeDialog : DialogFragment() {
+
+    interface TriggerTypeListener {
+        fun onTriggerSelected(triggerType: TriggerType)
+    }
+
+    private var listener: TriggerTypeListener? = null
+    private lateinit var binding: DialogTriggerTypesBinding
+
+    fun setTriggerTypeListener(listener: TriggerTypeListener) {
+        this.listener = listener
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        binding = DialogTriggerTypesBinding.inflate(inflater, container, false)
+        return binding.root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        setupUI()
+    }
+
+    private fun setupUI() {
+        with(binding) {
+            btnTimeTrigger.setOnClickListener { selectTrigger(TriggerType.TIME) }
+            btnCalendarTrigger.setOnClickListener { selectTrigger(TriggerType.CALENDAR) }
+            btnLocationTrigger.setOnClickListener { selectTrigger(TriggerType.LOCATION) }
+        }
+    }
+
+    private fun selectTrigger(type: TriggerType) {
+        listener?.onTriggerSelected(type)
+        dismiss()
+    }
+
+    enum class TriggerType {
+        TIME, CALENDAR, LOCATION
+    }
+
+    companion object {
+        fun newInstance() = TriggerTypeDialog()
+    }
+}
+
+//MainActivity.kt
+
+package com.example.rutinas.ui.main
+
+import android.os.Bundle
+import android.view.View
+import android.widget.Toast
+import androidx.navigation.NavController
+import androidx.navigation.fragment.NavHostFragment
+import androidx.navigation.ui.NavigationUI
+import com.example.rutinas.R
+import com.example.rutinas.databinding.ActivityMainBinding
+import com.example.rutinas.ui.common.BaseActivity
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
+class MainActivity : BaseActivity<ActivityMainBinding>() {
+
+    private lateinit var navController: NavController
+
+    override fun inflateViewBinding(): ActivityMainBinding {
+        return ActivityMainBinding.inflate(layoutInflater)
+    }
+
+    override fun setupViews() {
+        setupNavigation()
+        binding.bottomNavigation.visibility = View.VISIBLE
+        setupFab()
+    }
+
+    private fun setupNavigation() {
+        val navHostFragment = supportFragmentManager
+            .findFragmentById(R.id.nav_host_fragment) as NavHostFragment
+
+        navController = navHostFragment.navController
+        NavigationUI.setupWithNavController(binding.bottomNavigation, navController)
+    }
+
+    private fun setupFab() {
+        binding.fabAddRoutine.setOnClickListener {
+            // Solo navegar a la edición desde el fragmento de rutinas ("Rutinas")
+            if (navController.currentDestination?.id == R.id.routineListFragment) {
+                navController.navigate(R.id.action_routineListFragment_to_routineEditFragment)
+            } else {
+                Toast.makeText(this, "Acción no disponible en este contexto", Toast.LENGTH_SHORT)
+                    .show()
+            }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // BaseActivity se encarga de inflar el binding y llamar a setupViews()
+    }
+}
+
+//ActionAdapter.kt
+
+package com.example.rutinas.ui.main.adapter
+
+import android.view.LayoutInflater
+import android.view.ViewGroup
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.ListAdapter
+import androidx.recyclerview.widget.RecyclerView
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.databinding.ItemActionBinding
+import com.example.rutinas.ui.edit.RoutineEditViewModel
+
+class ActionAdapter(
+    private val viewModel: RoutineEditViewModel,
+    private val onActionDeleted: (Action) -> Unit,
+    private val onActionClicked: (Action) -> Unit
+) : ListAdapter<Action, ActionAdapter.ActionViewHolder>(ActionDiffCallback()) {
+
+    private var touchHelper: ItemTouchHelper? = null
+
+    inner class ActionViewHolder(private val binding: ItemActionBinding) : RecyclerView.ViewHolder(binding.root) {
+        fun bind(action: Action) {
+            with(binding) {
+                txtActionTitle.text = action.title
+                txtActionDescription.text = action.description
+                btnDeleteAction.setOnClickListener { onActionDeleted(action) }
+                root.setOnClickListener { onActionClicked(action) }
+            }
+        }
+    }
+
+    fun attachTouchHelper(recyclerView: RecyclerView) {
+        val callback = object : ItemTouchHelper.SimpleCallback(
+            ItemTouchHelper.UP or ItemTouchHelper.DOWN,
+            0
+        ) {
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder
+            ): Boolean {
+                val from = viewHolder.adapterPosition
+                val to = target.adapterPosition
+                moveItem(from, to)
+                return true
+            }
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {}
+        }
+        touchHelper = ItemTouchHelper(callback).apply {
+            attachToRecyclerView(recyclerView)
+        }
+    }
+
+    private fun moveItem(from: Int, to: Int) {
+        val newList = currentList.toMutableList().apply {
+            add(to, removeAt(from))
+        }
+        submitList(newList)
+        viewModel.updateActions(newList.mapIndexed { index, action ->
+            action.copy(executionOrder = index)
+        })
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ActionViewHolder {
+        val binding = ItemActionBinding.inflate(
+            LayoutInflater.from(parent.context),
+            parent,
+            false
+        )
+        return ActionViewHolder(binding)
+    }
+
+    override fun onBindViewHolder(holder: ActionViewHolder, position: Int) {
+        holder.bind(getItem(position))
+    }
+
+    class ActionDiffCallback : DiffUtil.ItemCallback<Action>() {
+        override fun areItemsTheSame(oldItem: Action, newItem: Action): Boolean = oldItem.id == newItem.id
+        override fun areContentsTheSame(oldItem: Action, newItem: Action): Boolean = oldItem == newItem
+    }
+}
+
+//ActionCategoriesAdapter.kt
+
+package com.example.rutinas.ui.main.adapter
+
+import android.content.Context
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.BaseExpandableListAdapter
+import android.widget.TextView
+import com.example.rutinas.R
+
+class ActionCategoriesAdapter(
+    private val context: Context,
+    private val categoryList: List<String>,
+    private val actionMap: HashMap<String, List<String>>
+) : BaseExpandableListAdapter() {
+
+    override fun getGroupCount(): Int = categoryList.size
+
+    override fun getChildrenCount(groupPosition: Int): Int {
+        val category = categoryList[groupPosition]
+        return actionMap[category]?.size ?: 0
+    }
+
+    override fun getGroup(groupPosition: Int): Any = categoryList[groupPosition]
+
+    override fun getChild(groupPosition: Int, childPosition: Int): Any {
+        val category = categoryList[groupPosition]
+        return actionMap[category]?.get(childPosition) ?: ""
+    }
+
+    override fun getGroupId(groupPosition: Int): Long = groupPosition.toLong()
+
+    override fun getChildId(groupPosition: Int, childPosition: Int): Long = childPosition.toLong()
+
+    override fun hasStableIds(): Boolean = false
+
+    override fun getGroupView(
+        groupPosition: Int,
+        isExpanded: Boolean,
+        convertView: View?,
+        parent: ViewGroup?
+    ): View {
+        val view = convertView ?: LayoutInflater.from(context)
+            .inflate(R.layout.list_group_action_category, parent, false)
+        val textView = view.findViewById<TextView>(R.id.tvCategoryName)
+        textView.text = getGroup(groupPosition) as String
+        return view
+    }
+
+    override fun getChildView(
+        groupPosition: Int,
+        childPosition: Int,
+        isLastChild: Boolean,
+        convertView: View?,
+        parent: ViewGroup?
+    ): View {
+        val view = convertView ?: LayoutInflater.from(context)
+            .inflate(R.layout.list_item_action, parent, false)
+        val textView = view.findViewById<TextView>(R.id.tvActionName)
+        textView.text = getChild(groupPosition, childPosition) as String
+        return view
+    }
+
+    override fun isChildSelectable(groupPosition: Int, childPosition: Int): Boolean = true
+}
+
+
+//RoutineAdapter.kt
+
+package com.example.rutinas.ui.main.adapter
+
+import android.view.LayoutInflater
+import android.view.ViewGroup
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
+import androidx.recyclerview.widget.RecyclerView
+import com.example.rutinas.databinding.ItemRoutineBinding
+import com.example.rutinas.domain.Routine
+
+class RoutineAdapter(
+    private val onSwitchChanged: (Routine, Boolean) -> Unit
+) : ListAdapter<Routine, RoutineAdapter.ViewHolder>(RoutineDiffCallback()) {
+
+    inner class ViewHolder(private val binding: ItemRoutineBinding) : RecyclerView.ViewHolder(binding.root) {
+        fun bind(routine: Routine) {
+            binding.apply {
+                tvRoutineName.text = routine.name
+                // Resetear el listener para evitar callbacks múltiples
+                switchEnable.setOnCheckedChangeListener(null)
+                switchEnable.isChecked = routine.isEnabled
+                switchEnable.setOnCheckedChangeListener { _, isChecked ->
+                    onSwitchChanged(routine, isChecked)
+                }
+            }
+        }
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+        val binding = ItemRoutineBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+        return ViewHolder(binding)
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+        holder.bind(getItem(position))
+    }
+
+    // Usamos un ArrayList para evitar problemas de mutabilidad.
+    override fun submitList(list: List<Routine>?) {
+        super.submitList(list?.let { ArrayList(it) })
+    }
+}
+
+class RoutineDiffCallback : DiffUtil.ItemCallback<Routine>() {
+    override fun areItemsTheSame(oldItem: Routine, newItem: Routine): Boolean {
+        return oldItem.id == newItem.id
+    }
+
+    override fun areContentsTheSame(oldItem: Routine, newItem: Routine): Boolean {
+        return oldItem == newItem
+    }
+}
+
+
+//TriggerAdapter.kt
+
+package com.example.rutinas.ui.main.adapter
+
+import android.view.LayoutInflater
+import android.view.ViewGroup
+import androidx.recyclerview.widget.RecyclerView
+import com.example.rutinas.data.model.Trigger
+import com.example.rutinas.databinding.ItemTriggerBinding
+
+class TriggerAdapter(
+    private val triggers: List<Trigger>,
+    private val onTriggerDeleted: (Trigger) -> Unit
+) : RecyclerView.Adapter<TriggerAdapter.TriggerViewHolder>() {
+
+    inner class TriggerViewHolder(
+        private val binding: ItemTriggerBinding
+    ) : RecyclerView.ViewHolder(binding.root) {
+
+        fun bind(trigger: Trigger) {
+            with(binding) {
+                // Configurar el texto según el tipo de trigger
+                when (trigger.type) {
+                    "TIME" -> {
+                        val hour = trigger.data["hour"] as Int
+                        val minute = trigger.data["minute"] as Int
+                        val frequency = trigger.data["frequency"] as String
+                        val selectedDays = trigger.data["selectedDays"] as List<Int>
+
+                        val timeText = String.format("%02d:%02d", hour, minute)
+                        val daysText = formatSelectedDays(selectedDays)
+
+                        tvTriggerType.text = "Tiempo"
+                        tvTriggerDetails.text = when (frequency) {
+                            "ONCE" -> "Una vez a las $timeText"
+                            "WEEKLY" -> "Semanalmente a las $timeText los días $daysText"
+                            "MONTHLY" -> "Mensualmente a las $timeText"
+                            else -> timeText
+                        }
+                    }
+                    "CALENDAR" -> {
+                        tvTriggerType.text = "Calendario"
+                        // Configurar detalles del calendario
+                    }
+                    "LOCATION" -> {
+                        tvTriggerType.text = "Ubicación"
+                        // Configurar detalles de ubicación
+                    }
+                }
+
+                // Configurar botón de eliminar
+                btnDelete.setOnClickListener {
+                    onTriggerDeleted(trigger)
+                }
+            }
+        }
+
+        private fun formatSelectedDays(days: List<Int>): String {
+            val dayNames = listOf("L", "M", "X", "J", "V", "S", "D")
+            return days.joinToString(", ") { dayNames[it - 1] }
+        }
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TriggerViewHolder {
+        val binding = ItemTriggerBinding.inflate(
+            LayoutInflater.from(parent.context),
+            parent,
+            false
+        )
+        return TriggerViewHolder(binding)
+    }
+
+    override fun onBindViewHolder(holder: TriggerViewHolder, position: Int) {
+        holder.bind(triggers[position])
+    }
+
+    override fun getItemCount(): Int = triggers.size
+}
+
+//RoutineListFragment.kt
+
+// RoutineListFragment.kt
+package com.example.rutinas.ui.main.fragments
+
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import androidx.fragment.app.viewModels
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.example.rutinas.databinding.FragmentRoutineListBinding
+import com.example.rutinas.ui.common.BaseFragment
+import com.example.rutinas.ui.main.adapter.RoutineAdapter
+import com.example.rutinas.ui.viewmodel.RoutineListViewModel
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
+class RoutineListFragment : BaseFragment<FragmentRoutineListBinding>() {
+
+    private val viewModel: RoutineListViewModel by viewModels()
+    private lateinit var adapter: RoutineAdapter
+
+    override fun inflateBinding(inflater: LayoutInflater, container: ViewGroup?): FragmentRoutineListBinding {
+        return FragmentRoutineListBinding.inflate(inflater, container, false)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        setupRecyclerView()
+        observeData()
+    }
+
+    private fun setupRecyclerView() {
+        adapter = RoutineAdapter { routine, isChecked ->
+            viewModel.toggleRoutineStatus(routine.id, isChecked)
+        }
+        binding.rvRoutines.layoutManager = LinearLayoutManager(requireContext())
+        binding.rvRoutines.adapter = adapter
+    }
+
+    private fun observeData() {
+        viewModel.routines.observe(viewLifecycleOwner) { routines ->
+            adapter.submitList(routines)
+        }
+    }
+
+    fun onPermissionGranted() {
+        // Lógica para manejar permisos concedidos
+    }
+}
+
+//StatusFragment.kt
+
+// StatusFragment.kt
+package com.example.rutinas.ui.main.fragments
+
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import com.example.rutinas.databinding.FragmentStatusBinding
+import com.example.rutinas.ui.common.BaseFragment
+
+class StatusFragment : BaseFragment<FragmentStatusBinding>() {
+
+    override fun inflateBinding(inflater: LayoutInflater, container: ViewGroup?): FragmentStatusBinding {
+        return FragmentStatusBinding.inflate(inflater, container, false)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        binding.tvStatusTitle.text = "Estado"
+    }
+
+    fun onPermissionGranted() {
+        // Lógica para manejar permisos concedidos
+    }
+}
+
+//Color.kt
+
+package com.example.rutinas.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+val Purple80 = Color(0xFFD0BCFF)
+val PurpleGrey80 = Color(0xFFCCC2DC)
+val Pink80 = Color(0xFFEFB8C8)
+
+val Purple40 = Color(0xFF6650a4)
+val PurpleGrey40 = Color(0xFF625b71)
+val Pink40 = Color(0xFF7D5260)
+
+//Theme.kt
+
+package com.example.rutinas.ui.theme
+
+import android.app.Activity
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
+
+private val DarkColorScheme = darkColorScheme(
+    primary = Purple80,
+    secondary = PurpleGrey80,
+    tertiary = Pink80
+)
+
+private val LightColorScheme = lightColorScheme(
+    primary = Purple40,
+    secondary = PurpleGrey40,
+    tertiary = Pink40
+
+    /* Other default colors to override
+    background = Color(0xFFFFFBFE),
+    surface = Color(0xFFFFFBFE),
+    onPrimary = Color.White,
+    onSecondary = Color.White,
+    onTertiary = Color.White,
+    onBackground = Color(0xFF1C1B1F),
+    onSurface = Color(0xFF1C1B1F),
+    */
+)
+
+@Composable
+fun RutinasTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    // Dynamic color is available on Android 12+
+    dynamicColor: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    val colorScheme = when {
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            val context = LocalContext.current
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        }
+
+        darkTheme -> DarkColorScheme
+        else -> LightColorScheme
+    }
+
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = Typography,
+        content = content
+    )
+}
+
+//Type.kt
+
+package com.example.rutinas.ui.theme
+
+import androidx.compose.material3.Typography
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+
+// Set of Material typography styles to start with
+val Typography = Typography(
+    bodyLarge = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Normal,
+        fontSize = 16.sp,
+        lineHeight = 24.sp,
+        letterSpacing = 0.5.sp
+    )
+    /* Other default text styles to override
+    titleLarge = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Normal,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
+        letterSpacing = 0.sp
+    ),
+    labelSmall = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Medium,
+        fontSize = 11.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.5.sp
+    )
+    */
+)
+
+//BaseViewModel.kt
+
+package com.example.rutinas.ui.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.LiveData
+import dagger.hilt.android.lifecycle.HiltViewModel
+import timber.log.Timber
+import javax.inject.Inject
+
+@HiltViewModel
+open // ✅ Anotación requerida
+class BaseViewModel @Inject constructor() : ViewModel() {
+    private val _errorMessage = MutableLiveData<String>()
+    val errorMessage: LiveData<String> = _errorMessage
+
+    private fun handleError(error: Throwable) {
+        _errorMessage.postValue(error.message ?: "Error desconocido")
+        Timber.e(error)
+    }
+}
+
+//RoutineListViewModel.kt
+
+package com.example.rutinas.ui.viewmodel
+
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.rutinas.data.repository.RoutineRepository
+import com.example.rutinas.domain.Routine
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.launch
+import androidx.lifecycle.asLiveData
+import javax.inject.Inject
+
+@HiltViewModel
+class RoutineListViewModel @Inject constructor(
+    private val repository: RoutineRepository
+) : ViewModel() {
+
+    // Usamos directamente el Flow convertido a LiveData.
+    val routines: LiveData<List<Routine>> = repository.getAllRoutines().asLiveData()
+
+    fun toggleRoutineStatus(routineId: Long, isEnabled: Boolean) {
+        viewModelScope.launch {
+            repository.updateRoutineStatus(routineId, isEnabled)
+        }
+    }
+
+    fun insertRoutine(routine: Routine) {
+        viewModelScope.launch {
+            repository.insertRoutine(routine)
+        }
+    }
+}
+
+
+//AnnouncementPlayer.kt
+
+package com.example.rutinas.utils
+
+import android.content.Context
+import android.speech.tts.TextToSpeech
+import java.util.Locale
+
+class AnnouncementPlayer(private val context: Context) {
+
+    private var tts: TextToSpeech? = null
+
+    fun initialize(onInitialized: (Boolean) -> Unit) {
+        tts = TextToSpeech(context) { status ->
+            onInitialized(status == TextToSpeech.SUCCESS)
+        }
+    }
+
+    fun setLanguage(languageCode: String) {
+        val locale = when (languageCode) {
+            "en" -> Locale.ENGLISH
+            "pt" -> Locale("pt", "BR")
+            else -> Locale("es", "ES")
+        }
+        tts?.language = locale
+    }
+
+    fun speak(text: String) {
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "announcement")
+    }
+
+    fun shutdown() {
+        tts?.stop()
+        tts?.shutdown()
+    }
+}
+
+//NotificationReader.kt
+
+package com.example.rutinas.util
+
+import android.app.Notification
+import android.content.Context
+import android.service.notification.StatusBarNotification
+import android.speech.tts.TextToSpeech
+import android.util.Log
+import java.util.Locale
+
+class NotificationReader(private val context: Context) {
+    private var tts: TextToSpeech? = null
+    private var isInitialized = false
+
+    companion object {
+        private const val TAG = "NotificationReader"
+    }
+
+    fun initialize(onInitialized: (Boolean) -> Unit) {
+        tts = TextToSpeech(context) { status ->
+            isInitialized = status == TextToSpeech.SUCCESS
+            if (isInitialized) {
+                tts?.language = Locale.getDefault()
+            }
+            onInitialized(isInitialized)
+        }
+    }
+
+    fun readNotifications(
+        notifications: Array<StatusBarNotification>,
+        excludedPackages: List<String>,
+        onComplete: () -> Unit
+    ) {
+        if (!isInitialized) {
+            Log.w(TAG, "TTS no inicializado")
+            onComplete()
+            return
+        }
+
+        // Registrar todas las notificaciones para depuración
+        logNotifications(notifications)
+
+        val notificationsToRead = notifications
+            .filter { shouldReadNotification(it, excludedPackages) }
+            .map { notification ->
+                val title = notification.notification.extras.getString(Notification.EXTRA_TITLE, "")
+                val text = notification.notification.extras.getString(Notification.EXTRA_TEXT, "")
+                "$title: $text"
+            }
+
+        if (notificationsToRead.isEmpty()) {
+            Log.i(TAG, "No hay notificaciones para leer")
+            tts?.speak(
+                "No hay notificaciones pendientes",
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "NO_NOTIFICATIONS"
+            )
+            onComplete()
+            return
+        }
+
+        // Leer cada notificación
+        notificationsToRead.forEachIndexed { index, text ->
+            Log.i(TAG, "Leyendo notificación $index: $text")
+            val queueMode = if (index == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+            tts?.speak(text, queueMode, null, "NOTIFICATION_$index")
+        }
+
+        onComplete()
+    }
+
+    private fun shouldReadNotification(
+        sbn: StatusBarNotification,
+        excludedPackages: List<String>
+    ): Boolean {
+        // Excluir notificaciones del sistema
+        if (isSystemNotification(sbn)) {
+            Log.d(TAG, "Notificación excluida (sistema): ${sbn.packageName}")
+            return false
+        }
+
+        // Excluir notificaciones persistentes
+        if (isOngoingNotification(sbn)) {
+            Log.d(TAG, "Notificación excluida (persistente): ${sbn.packageName}")
+            return false
+        }
+
+        // Excluir notificaciones de paquetes específicos
+        if (excludedPackages.contains(sbn.packageName)) {
+            Log.d(TAG, "Notificación excluida (lista de exclusión): ${sbn.packageName}")
+            return false
+        }
+
+        // Verificar que la notificación tenga texto para leer
+        val text = sbn.notification.extras.getString(Notification.EXTRA_TEXT)
+        if (text.isNullOrBlank()) {
+            Log.d(TAG, "Notificación excluida (sin texto): ${sbn.packageName}")
+            return false
+        }
+
+        return true
+    }
+
+    private fun isSystemNotification(sbn: StatusBarNotification): Boolean {
+        return sbn.packageName.startsWith("android") ||
+                sbn.packageName.startsWith("com.android")
+    }
+
+    private fun isOngoingNotification(sbn: StatusBarNotification): Boolean {
+        return sbn.notification.flags and Notification.FLAG_ONGOING_EVENT != 0
+    }
+
+    private fun logNotifications(notifications: Array<StatusBarNotification>) {
+        Log.d(TAG, "=== Notificaciones Activas ===")
+        notifications.forEach { sbn ->
+            val packageName = sbn.packageName
+            val title = sbn.notification.extras.getString(Notification.EXTRA_TITLE, "Sin título")
+            val text = sbn.notification.extras.getString(Notification.EXTRA_TEXT, "Sin texto")
+            val isOngoing = isOngoingNotification(sbn)
+
+            Log.d(TAG, """
+                Paquete: $packageName
+                Título: $title
+                Texto: $text
+                Persistente: $isOngoing
+                ===
+            """.trimIndent())
+        }
+    }
+
+    fun shutdown() {
+        tts?.stop()
+        tts?.shutdown()
+        isInitialized = false
+    }
+}
+
+//PermissionManager.kt
+
+package com.example.rutinas.utils
+
+import android.content.Context
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import javax.inject.Inject
+import javax.inject.Singleton
+import timber.log.Timber
+
+
+class PermissionManager @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
+    private val _permissionStatus = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val permissionStatus: StateFlow<Map<String, Boolean>> = _permissionStatus
+
+    fun checkPermissions(vararg permissions: String): Map<String, Boolean> {
+        Timber.d("Verificando permisos: ${permissions.joinToString()}")
+        return permissions.associateWith { permission ->
+            val result = ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+            Timber.d("Permiso $permission: ${if (result) "Concedido" else "Denegado"}")
+            result
+        }.also {
+            _permissionStatus.value = it
+        }
+    }
+
+    fun onPermissionsResult(permissions: Array<out String>, grantResults: IntArray) {
+        Timber.d("Procesando resultados de permisos")
+        val results = permissions.zip(grantResults.toList()).associate { (perm, result) ->
+            val granted = result == PackageManager.PERMISSION_GRANTED
+            Timber.d("Resultado permiso $perm: ${if (granted) "Concedido" else "Denegado"}")
+            perm to granted
+        }
+        _permissionStatus.value = _permissionStatus.value + results
+    }
+}
+
+//Resource.kt
+
+package com.example.rutinas.utils
+
+sealed class Resource<out T> {
+    data class Success<out T>(val data: T) : Resource<T>()  // Tipo explícito
+    data class Error(val message: String) : Resource<Nothing>()
+    object Loading : Resource<Nothing>()
+}
+
+//SnackbarExtension.kt
+
+package com.example.rutinas.utils
+
+import android.view.View
+import com.google.android.material.snackbar.Snackbar
+
+fun View.showSuccessSnackbar(message: String, duration: Int = Snackbar.LENGTH_LONG) {
+    Snackbar.make(this, message, duration)
+        .setBackgroundTint(context.getColor(android.R.color.holo_green_dark))
+        .show()
+}
+
+fun View.showErrorSnackbar(message: String, duration: Int = Snackbar.LENGTH_LONG) {
+    Snackbar.make(this, message, duration)
+        .setBackgroundTint(context.getColor(android.R.color.holo_red_dark))
+        .show()
+}
+
+fun View.showSnackbar(message: String, duration: Int = Snackbar.LENGTH_LONG) {
+    Snackbar.make(this, message, duration).show()
+}
+

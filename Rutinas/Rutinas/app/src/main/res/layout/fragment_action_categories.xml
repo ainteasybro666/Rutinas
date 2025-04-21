@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Selecciona una acción"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp"/>
+
+    <Button
+        android:id="@+id/btnAnnouncement"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Anunciar"/>
+
+    <Button
+        android:id="@+id/btnAlarm"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Alarma"/>
+
+    <Button
+        android:id="@+id/btnTime"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Decir hora"/>
+
+    <Button
+        android:id="@+id/btnVolume"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Ajustar volumen"/>
+
+    <Button
+        android:id="@+id/btnBrightness"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Ajustar brillo"/>
+
+    <Button
+        android:id="@+id/btnSoundMode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Modo de sonido"/>
+</LinearLayout>

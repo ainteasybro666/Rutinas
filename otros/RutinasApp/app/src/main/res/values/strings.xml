@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">RutinasApp</string>
+    <string name="add_routine">Add Routine</string>
+    <string name="delete_action">Quitar acción</string>
+</resources>

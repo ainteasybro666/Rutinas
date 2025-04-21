@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <!-- Campo para el nombre de la rutina -->
+    <EditText
+        android:id="@+id/etRoutineName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Nombre de la rutina" />
+
+    <!-- Zona para mostrar o configurar triggers -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Triggers (ej: hora, calendario, etc.)"
+        android:paddingTop="8dp"/>
+
+    <!-- Aquí se podría mostrar la lista de triggers o un selector de hora -->
+
+    <!-- Zona para mostrar o configurar acciones (RecyclerView con posibilidad de reordenar) -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Acciones a ejecutar en orden"
+        android:paddingTop="8dp"/>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvActions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="8dp"/>
+
+    <!-- Botón para añadir nueva acción -->
+    <Button
+        android:id="@+id/btnAddAction"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Agregar acción" />
+
+    <!-- Botón para guardar cambios -->
+    <Button
+        android:id="@+id/btnSaveRoutine"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Guardar"
+        android:layout_marginTop="16dp"/>
+</LinearLayout>

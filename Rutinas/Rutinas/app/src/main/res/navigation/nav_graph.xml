@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/routineListFragment">
+
+    <!-- Fragmento de lista de rutinas -->
+    <fragment
+        android:id="@+id/routineListFragment"
+        android:name="com.example.rutinas.ui.main.fragments.RoutineListFragment"
+        android:label="Rutinas">
+        <action
+            android:id="@+id/action_routineListFragment_to_routineEditFragment"
+            app:destination="@id/routineEditFragment" />
+        <action
+            android:id="@+id/action_routineListFragment_to_statusFragment"
+            app:destination="@id/statusFragment" />
+    </fragment>
+
+    <!-- Fragmento de edición de rutina -->
+    <fragment
+        android:id="@+id/routineEditFragment"
+        android:name="com.example.rutinas.ui.edit.RoutineEditFragment"
+        android:label="Editar Rutina">
+        <action
+            android:id="@+id/action_routineEditFragment_to_editAnnouncementActionDialogFragment"
+            app:destination="@id/editAnnouncementActionDialogFragment" />
+        <action
+            android:id="@+id/action_routineEditFragment_to_editAlarmActionDialogFragment"
+            app:destination="@id/editAlarmActionDialogFragment" />
+        <action
+            android:id="@+id/action_routineEditFragment_to_editReadNotificationsActionDialogFragment"
+            app:destination="@id/editReadNotificationsActionDialogFragment" />
+        <action
+            android:id="@+id/action_routineEditFragment_to_editSoundModeActionDialogFragment"
+            app:destination="@id/editSoundModeActionDialogFragment" />
+        <action
+            android:id="@+id/action_routineEditFragment_to_editBrightnessActionDialogFragment"
+            app:destination="@id/editBrightnessActionDialogFragment" />
+        <action
+            android:id="@+id/action_routineEditFragment_to_editTimeActionDialogFragment"
+            app:destination="@id/editTimeActionDialogFragment" />
+        <action
+            android:id="@+id/action_routineEditFragment_to_editVolumeActionDialogFragment"
+            app:destination="@id/editVolumeActionDialogFragment" />
+    </fragment>
+
+    <!-- Diálogos de edición, cada uno con el argumento requerido -->
+    <dialog
+        android:id="@+id/editAnnouncementActionDialogFragment"
+        android:name="com.example.rutinas.ui.edit.actions.EditAnnouncementActionDialogFragment"
+        android:label="Editar Anuncio">
+        <argument
+            android:name="arg_action"
+            app:argType="com.example.rutinas.data.model.Action" />
+    </dialog>
+
+    <dialog
+        android:id="@+id/editAlarmActionDialogFragment"
+        android:name="com.example.rutinas.ui.edit.actions.EditAlarmActionDialogFragment"
+        android:label="Editar Alarma">
+        <argument
+            android:name="arg_action"
+            app:argType="com.example.rutinas.data.model.Action" />
+    </dialog>
+
+    <dialog
+        android:id="@+id/editReadNotificationsActionDialogFragment"
+        android:name="com.example.rutinas.ui.edit.actions.EditReadNotificationsActionDialogFragment"
+        android:label="Editar Notificaciones">
+        <argument
+            android:name="arg_action"
+            app:argType="com.example.rutinas.data.model.Action" />
+    </dialog>
+
+    <dialog
+        android:id="@+id/editSoundModeActionDialogFragment"
+        android:name="com.example.rutinas.ui.edit.actions.EditSoundModeActionDialogFragment"
+        android:label="Editar Modo de Sonido">
+        <argument
+            android:name="arg_action"
+            app:argType="com.example.rutinas.data.model.Action" />
+    </dialog>
+
+    <dialog
+        android:id="@+id/editBrightnessActionDialogFragment"
+        android:name="com.example.rutinas.ui.edit.actions.EditBrightnessActionDialogFragment"
+        android:label="Editar Brillo">
+        <argument
+            android:name="arg_action"
+            app:argType="com.example.rutinas.data.model.Action" />
+    </dialog>
+
+    <dialog
+        android:id="@+id/editTimeActionDialogFragment"
+        android:name="com.example.rutinas.ui.edit.actions.EditTimeActionDialogFragment"
+        android:label="Editar Tiempo">
+        <argument
+            android:name="arg_action"
+            app:argType="com.example.rutinas.data.model.Action" />
+    </dialog>
+
+    <dialog
+        android:id="@+id/editVolumeActionDialogFragment"
+        android:name="com.example.rutinas.ui.edit.actions.EditVolumeActionDialogFragment"
+        android:label="Editar Volumen">
+        <argument
+            android:name="arg_action"
+            app:argType="com.example.rutinas.data.model.Action" />
+    </dialog>
+
+    <!-- Fragmento de status -->
+    <fragment
+        android:id="@+id/statusFragment"
+        android:name="com.example.rutinas.ui.main.fragments.StatusFragment"
+        android:label="Status" />
+</navigation>

@@ -1,0 +1,541 @@
+// Action.kt
+
+// Action.kt
+package com.example.rutinas.data.model
+
+import androidx.room.ColumnInfo
+import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
+import androidx.room.PrimaryKey
+import android.os.Parcelable
+import kotlinx.parcelize.Parcelize
+import kotlinx.parcelize.RawValue
+import java.util.UUID
+
+@Entity(
+    tableName = "actions",
+    foreignKeys = [
+        ForeignKey(
+            entity = RoutineEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["routineId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index(value = ["routineId"], name = "idx_action_routine_id")]
+)
+@Parcelize
+data class Action(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    var uuid: String = UUID.randomUUID().toString(),
+    val type: String,
+    val routineId: Long,
+    @RawValue
+    @ColumnInfo(name = "data")
+    val data: Map<String, Any> = emptyMap(),
+    val executionOrder: Int
+) : Parcelable {
+
+    fun getString(key: String): String? = data[key] as? String
+    fun getInt(key: String): Int? = (data[key] as? Number)?.toInt()
+    fun getBoolean(key: String): Boolean? = data[key] as? Boolean
+
+    // Propiedades calculadas para la UI
+    val title: String
+        get() = when (ActionType.fromString(type)) {
+            ActionType.ANNOUNCEMENT -> "Anuncio"
+            ActionType.ALARM -> "Alarma"
+            ActionType.NOTIFICATIONS -> "Leer Notificaciones"
+            ActionType.TIME -> "Decir Hora"
+            ActionType.VOLUME -> "Ajustar Volumen"
+            ActionType.BRIGHTNESS -> "Ajustar Brillo"
+            ActionType.SOUND_MODE -> "Modo de Sonido"
+        }
+
+    val description: String
+        get() = when (ActionType.fromString(type)) {
+            ActionType.ANNOUNCEMENT -> data["message"] as? String ?: "Sin mensaje"
+            ActionType.ALARM -> "Alarma: ${data["time"] ?: "No configurada"}"
+            ActionType.NOTIFICATIONS -> "Leer notificaciones activas"
+            ActionType.TIME -> "Informar hora actual"
+            ActionType.VOLUME -> {
+                val volumes = mutableListOf<String>()
+                if (data["mediaVolume"] != null) volumes.add("Media")
+                if (data["ringtoneVolume"] != null) volumes.add("Ringtone")
+                if (data["alarmVolume"] != null) volumes.add("Alarma")
+                "Ajustar volumen: ${volumes.joinToString(", ")}"
+            }
+            ActionType.BRIGHTNESS -> "Brillo: ${data["level"]}%"
+            ActionType.SOUND_MODE -> when (data["mode"]) {
+                "silent" -> "Modo silencioso"
+                "vibrate" -> "Modo vibración"
+                else -> "Modo no especificado"
+            }
+        }
+
+    companion object {
+        fun createAction(
+            routineId: Long,
+            actionType: ActionType,
+            data: Map<String, Any>,
+            executionOrder: Int
+        ): Action {
+            return Action(
+                routineId = routineId,
+                type = actionType.name,
+                data = data,
+                executionOrder = executionOrder
+            ).apply {
+                // Genera nuevo UUID automáticamente
+                uuid = UUID.randomUUID().toString()
+            }
+        }
+    }
+}
+
+
+// Routine.kt
+
+package com.example.rutinas.domain
+
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.Trigger
+import java.time.LocalDateTime
+
+data class Routine(
+    val id: Long = 0,
+    val name: String,
+    val description: String? = null,
+    val isEnabled: Boolean = true,
+    val createdDate: LocalDateTime = LocalDateTime.now(),
+    val triggers: List<Trigger> = emptyList(),
+    val actions: List<Action> = emptyList()
+)
+
+// FrequencyType.kt
+
+package com.example.rutinas.data.model
+
+enum class FrequencyType {
+    ONCE,
+    WEEKLY,
+    MONTHLY
+}
+
+// RoutineEntity.kt
+
+package com.example.rutinas.data.model
+
+import android.os.Parcelable
+import androidx.room.Query
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import com.example.rutinas.domain.Routine
+import kotlinx.coroutines.flow.Flow
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+import kotlinx.parcelize.Parcelize
+import java.time.LocalDateTime
+import java.util.UUID
+
+@Entity(tableName = "routines")
+@Parcelize
+data class RoutineEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val uuid: String = UUID.randomUUID().toString(),
+    val name: String,
+    val description: String? = null,
+    val isEnabled: Boolean = true,
+    val createdDate: LocalDateTime = LocalDateTime.now()
+) : Parcelable
+
+// AlarmScheduler.kt
+
+package com.example.rutinas.alarms
+
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import com.example.rutinas.domain.Routine
+import com.example.rutinas.data.model.RoutineEntity
+import com.example.rutinas.data.model.Trigger
+import com.example.rutinas.receivers.AlarmReceiver
+import timber.log.Timber
+import java.util.Calendar
+
+class AlarmScheduler(private val context: Context) {
+
+    private val alarmManager: AlarmManager =
+        context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+    fun schedule(routine: Routine) {
+        Timber.d("Programando alarmas para la rutina: ${routine.uuid}, ${routine.name}")
+
+        // Cancelar alarmas existentes antes de programar nuevas
+        cancel(routine)
+
+        routine.triggers.filter { it.triggerType == "TIME" }.forEach { trigger ->
+            scheduleTimeTrigger(routine, trigger)
+        }
+    }
+
+    private fun scheduleTimeTrigger(routine: Routine, trigger: Trigger) {
+        val hour = trigger.data["hour"] as? Int
+        val minute = trigger.data["minute"] as? Int
+        if (hour == null || minute == null) {
+            throw IllegalArgumentException("Hour and minute must be specified for time triggers.")
+        }
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+
+            // Adjust for past times (set for next occurrence)
+            val frequency = trigger.data["frequency"] as? String ?: "daily"
+            when (frequency) {
+                "daily" -> {
+                    if (timeInMillis <= System.currentTimeMillis()) {
+                        add(Calendar.DAY_OF_MONTH, 1)
+                    }
+                }
+                "weekly" -> {
+                    val daysOfWeek = trigger.data["daysOfWeek"] as? List<Int>
+                    if (daysOfWeek == null || daysOfWeek.isEmpty()) {
+                        // Skip scheduling and log a warning
+                        Timber.w("No days of the week specified for weekly trigger. Skipping scheduling: ${routine.name}")
+                        return
+                    } else {
+                        if (timeInMillis <= System.currentTimeMillis()) {
+                            do {
+                                add(Calendar.DAY_OF_WEEK, 1)
+                            } while (!daysOfWeek.contains(get(Calendar.DAY_OF_WEEK) - 1)) // daysOfWeek: 0 (Sun) - 6 (Sat), Calendar.DAY_OF_WEEK: 1 (Sun) - 7 (Sat)
+                        }
+                    }
+                }
+                "monthly" -> {
+                    if (timeInMillis <= System.currentTimeMillis()) {
+                        add(Calendar.MONTH, 1)
+                    }
+                }
+            }
+
+            when (frequency) {
+                "daily" -> {
+                    // No additional adjustments needed
+                }
+                "weekly" -> {
+                    val daysOfWeek = trigger.data["daysOfWeek"] as? List<Int>
+                    if (daysOfWeek != null && daysOfWeek.isNotEmpty()) {
+                        val dayOfWeek = daysOfWeek.minOrNull() ?: return // daysOfWeek: 0 (Sun) - 6 (Sat)
+                        val targetDayOfWeek = (dayOfWeek + 1) // Calendar.DAY_OF_WEEK: 1 (Sun) - 7 (Sat)
+                        while (get(Calendar.DAY_OF_WEEK) != targetDayOfWeek) {
+                            add(Calendar.DAY_OF_WEEK, 1)
+                        }
+                    }
+                }
+                "monthly" -> {
+                    val dayOfMonth = (trigger.data["dayOfMonth"] as? Number)?.toInt() ?: 1
+                    set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                    if (get(Calendar.DAY_OF_MONTH) != dayOfMonth) {
+                        set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
+                    }
+                }
+            }
+        }
+
+        val alarmId = generateAlarmId(routine, trigger)
+        val pendingIntent = createPendingIntent(routine, alarmId)
+
+        Timber.d("Programando alarma $frequency para $hour:$minute (${routine.name}), id: $alarmId, time: ${calendar.time}")
+
+        if (canScheduleExactAlarms()) {
+            alarmManager.setExact(
+                AlarmManager.RTC_WAKEUP,
+                calendar.timeInMillis,
+                pendingIntent
+            )
+        } else {
+            alarmManager.setWindow(
+                AlarmManager.RTC_WAKEUP,
+                calendar.timeInMillis,
+                300_000, // 5 minutos de ventana
+                pendingIntent
+            )
+            Timber.w("No se tienen permisos para alarmas exactas. Se usará una ventana de 5 minutos.")
+        }
+    }
+
+    fun cancel(routine: Routine) {
+        Timber.d("Cancelando alarmas para la rutina: ${routine.uuid}, ${routine.name}")
+        routine.triggers.filter { it.triggerType == "TIME" }.forEach { trigger ->
+            cancelTimeTrigger(routine, trigger)
+        }
+    }
+
+    private fun cancelTimeTrigger(routine: Routine, trigger: Trigger) {
+        val alarmId = generateAlarmId(routine, trigger)
+        val pendingIntent = createPendingIntent(routine, alarmId)
+        alarmManager.cancel(pendingIntent)
+        Timber.d("Alarma cancelada para ${routine.name}, id: $alarmId")
+    }
+
+    private fun generateAlarmId(routine: Routine, trigger: Trigger): Int {
+        // Combine routine UUID and a trigger identifier to create a unique ID
+        return "${routine.uuid}-${trigger.uuid}".hashCode()
+    }
+
+    // TODO: This method MUST be replaced with the actual implementation to retrieve a RoutineEntity
+    // from your Room database based on the UUID.
+    // You need to use your Room DAO (e.g., routineDao) to fetch the RoutineEntity.
+    // Example: return routineDao.getRoutineByUuid(uuid)
+    private fun getRoutineEntityByUuid(uuid: String): RoutineEntity {
+        // Example (replace with your Room DAO): routineDao.getRoutineByUuid(uuid)
+        throw NotImplementedError("getRoutineEntityByUuid(uuid) is not implemented yet.")
+    }
+
+    private fun createPendingIntent(routine: Routine, alarmId: Int): PendingIntent {
+        //  Obtener la RoutineEntity a partir del UUID.  Adaptar esto según tu implementación.
+        val routineEntity = getRoutineEntityByUuid(routine.uuid)  //  Asumiendo que este método existe
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId)
+            putExtra(AlarmReceiver.EXTRA_ROUTINE_UUID, routineEntity.uuid)  // Pasar UUID
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            alarmId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    fun rescheduleAll() {
+        //TODO: Need to implement this properly, get all active routines
+        Timber.d("Reprogramando todas las alarmas...")
+        // TODO: Obtener todas las rutinas activas del ViewModel o Repository
+        //  y llamar a schedule(routine) para cada una
+        //  Por ahora, un ejemplo con una rutina হার্ডcodeada
+        //  Esto se DEBE cambiar
+        /*val rutinaHardcodeada = Routine(
+            uuid = "123e4567-e89b-12d3-a456-426614174000",
+            name = "Rutina de prueba",
+            triggers = listOf(
+                Trigger(
+                    type = Trigger.TriggerType.TIME.name,
+                    hour = 8,
+                    minute = 0,
+                    frequency = "daily"
+                )
+            ),
+            actions = emptyList(),
+            isActive = true
+        )
+        schedule(rutinaHardcodeada)*/
+        Timber.d("La reprogramación total de alarmas está implementada a medias. Ver TODO.")
+    }
+
+    fun canScheduleExactAlarms(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager.canScheduleExactAlarms()
+        } else {
+            true // En versiones anteriores a Android 12, no hay restricciones
+        }
+    }
+}
+
+// RoutineRepositoryImpl.kt
+
+package com.example.rutinas.data.repository
+
+import androidx.room.withTransaction
+import com.example.rutinas.data.local.AppDatabase
+import com.example.rutinas.data.local.dao.ActionDao
+import com.example.rutinas.data.local.dao.RoutineDao
+import com.example.rutinas.data.local.dao.TriggerDao
+import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.RoutineEntity
+import com.example.rutinas.data.model.Trigger
+import com.example.rutinas.domain.Routine
+import com.example.rutinas.utils.Resource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
+import timber.log.Timber
+import java.time.LocalDateTime
+import java.util.UUID
+import javax.inject.Inject
+
+class RoutineRepositoryImpl @Inject constructor(
+    private val db: AppDatabase
+) : RoutineRepository {
+
+    private val routineDao: RoutineDao = db.routineDao()
+    private val triggerDao: TriggerDao = db.triggerDao()
+    private val actionDao: ActionDao = db.actionDao()
+
+    override fun getAllRoutines(): Flow<List<Routine>> {
+        return routineDao.getRoutinesWithRelations()
+            .map { routinesWithRelations ->
+                routinesWithRelations.map { it.toDomainModel() }
+            }
+    }
+
+    override suspend fun saveRoutine(routine: Routine): Resource<Long> = withContext(Dispatchers.IO) {
+        try {
+            db.withTransaction {
+                val routineId = if (routine.id == 0L) {
+                    insertNewRoutine(routine)
+                } else {
+                    updateExistingRoutine(routine)
+                }
+                syncTriggers(routineId, routine.triggers)
+                syncActions(routineId, routine.actions)
+                Resource.Success(routineId)
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Error saving routine")
+            Resource.Error(e.localizedMessage ?: "Unknown error")
+        }
+    }
+
+    private suspend fun insertNewRoutine(routine: Routine): Long {
+        val routineEntity = RoutineEntity(
+            uuid = UUID.randomUUID().toString(),
+            name = routine.name,
+            description = routine.description,
+            isEnabled = routine.isEnabled,
+            createdDate = routine.createdDate
+        )
+        return routineDao.insertRoutine(routineEntity)
+    }
+
+    private suspend fun updateExistingRoutine(routine: Routine): Long {
+        routineDao.update(
+            RoutineEntity(
+                id = routine.id,
+                uuid = routine.uuid,
+                name = routine.name,
+                description = routine.description,
+                isEnabled = routine.isEnabled,
+                createdDate = routine.createdDate
+            )
+        )
+        return routine.id
+    }
+
+    private suspend fun syncTriggers(routineId: Long, triggers: List<Trigger>) {
+        val currentTriggers = triggerDao.getTriggersForRoutine(routineId)
+        // Eliminar triggers removidos
+        currentTriggers.filter { current ->
+            triggers.none { it.uuid == current.uuid }
+        }.forEach { triggerDao.delete(it) }
+
+        // Insertar/Actualizar triggers
+        triggers.forEach { trigger ->
+            val triggerToSave = trigger.copy(routineId = routineId)
+            if (trigger.id == "") {
+                triggerDao.insert(triggerToSave.copy(uuid = UUID.randomUUID().toString()))
+            } else {
+                triggerDao.update(triggerToSave)
+            }
+        }
+    }
+
+    private suspend fun syncActions(routineId: Long, actions: List<Action>) {
+        val currentActions = actionDao.getActionsForRoutine(routineId)
+        // Eliminar acciones removidas
+        currentActions.filter { current ->
+            actions.none { it.uuid == current.uuid }
+        }.forEach { actionDao.delete(it) }
+
+        // Insertar/Actualizar acciones
+        actions.forEachIndexed { index, action ->
+            val actionToSave = action.copy(routineId = routineId, executionOrder = index)
+            if (action.id == "") {
+                actionDao.insert(actionToSave.copy(uuid = UUID.randomUUID().toString()))
+            } else {
+                actionDao.update(actionToSave)
+            }
+        }
+    }
+
+    override suspend fun updateRoutineStatus(routineId: Long, isEnabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            routineDao.updateEnabledStatus(routineId, isEnabled)
+        }
+    }
+
+    override suspend fun insertRoutine(routine: Routine) {
+        saveRoutine(routine)
+    }
+
+    override suspend fun updateActions(actions: List<Action>) {
+        db.withTransaction {
+            // No es necesario llamar a updateAll, ya que syncActions maneja las actualizaciones
+        }
+    }
+
+    override suspend fun getRoutineByUuid(uuid: String): Routine? {
+        return routineDao.getRoutineByUuid(uuid)?.let { routineEntity ->
+            val triggers = triggerDao.getTriggersForRoutine(routineEntity.id)
+            val actions = actionDao.getActionsForRoutine(routineEntity.id)
+            routineEntity.toDomainModel(triggers, actions)
+        }
+    }
+
+    override suspend fun updateActionsOrder(actions: List<Action>) {
+        db.withTransaction {
+            actions.forEachIndexed { index, action ->
+                actionDao.updateActionOrder(action.uuid, index)
+            }
+        }
+    }
+
+    // Nuevos métodos para actualizar acciones individualmente y eliminar
+    override suspend fun updateAction(action: Action) {
+        withContext(Dispatchers.IO) {
+            actionDao.update(action)
+        }
+    }
+
+    override suspend fun deleteAction(action: Action) {
+        withContext(Dispatchers.IO) {
+            actionDao.delete(action)
+        }
+    }
+
+    // Extension functions para conversión de modelos
+    private fun AppDatabase.RoutineWithRelations.toDomainModel() = Routine(
+        id = routine.id,
+        uuid = routine.uuid,
+        name = routine.name,
+        description = routine.description,
+        isEnabled = routine.isEnabled,
+        createdDate = routine.createdDate,
+        triggers = triggers,
+        actions = actions.sortedBy { it.executionOrder }
+    )
+
+    private fun RoutineEntity.toDomainModel(
+        triggers: List<Trigger>,
+        actions: List<Action>
+    ): Routine {
+        return Routine(
+            id = this.id,
+            uuid = this.uuid,
+            name = this.name,
+            description = this.description,
+            isEnabled = this.isEnabled,
+            createdDate = this.createdDate,
+            triggers = triggers,
+            actions = actions.sortedBy { it.executionOrder }
+        )
+    }
+}
+
