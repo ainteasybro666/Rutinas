@@ -62,7 +62,7 @@ class AddActionDialogFragment : DialogFragment() {
             val categories = listOf(
                 Category("Comunicación", listOf(
                     ActionItem(ActionType.ANNOUNCEMENT.name, "Anuncio", R.drawable.ic_announcement),
-                    ActionItem(ActionType.NOTIFICATIONS.name, "Leer Notificaciones", R.drawable.ic_notifications)
+                    ActionItem(ActionType.READ_NOTIFICATIONS.name, "Leer Notificaciones", R.drawable.ic_notifications)
                 )),
                 Category("Dispositivo", listOf(
                     ActionItem(ActionType.BRIGHTNESS.name, "Ajustar Brillo", R.drawable.ic_brightness),
