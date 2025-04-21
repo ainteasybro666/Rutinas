@@ -15,7 +15,7 @@ import kotlinx.parcelize.Parcelize
 import timber.log.Timber
 
 @Parcelize
-class EditAlarmActionDialogFragment : DialogFragment(), ActionEditorDialog, Parcelable {
+class EditAlarmActionDialogFragment : BaseEditActionDialogFragment(), ActionEditorDialog, Parcelable {
     private var _binding: FragmentEditAlarmActionBinding? = null
     private val binding get() = _binding!!
     private lateinit var action: Action
@@ -29,18 +29,8 @@ class EditAlarmActionDialogFragment : DialogFragment(), ActionEditorDialog, Parc
         Timber.d("EditAlarmActionDialogFragment: onCreateDialog() llamado")
         _binding = FragmentEditAlarmActionBinding.inflate(layoutInflater)
 
-        try {
-            action = requireArguments().getParcelable(ARG_ACTION)
-                ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
-
-            Timber.d("EditAlarmActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
-
-            setupUI()
-            loadActionData()
-        } catch (e: Exception) {
-            Timber.e("EditAlarmActionDialogFragment: Error al obtener la acción - ${e.message}")
-            e.printStackTrace()
-        }
+        setupUI()
+        loadActionData()
 
         val dialog = AlertDialog.Builder(requireContext())
             .setView(binding.root)

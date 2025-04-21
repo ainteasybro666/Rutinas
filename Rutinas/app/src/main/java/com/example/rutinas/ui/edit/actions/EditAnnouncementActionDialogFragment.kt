@@ -4,9 +4,7 @@ import android.app.Dialog
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
-import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.widget.SeekBar
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
@@ -14,9 +12,7 @@ import com.example.rutinas.data.model.Action
 import com.example.rutinas.databinding.FragmentEditAnnouncementActionBinding
 import timber.log.Timber
 
-class EditAnnouncementActionDialogFragment : DialogFragment(), ActionEditorDialog {
-    private var _binding: FragmentEditAnnouncementActionBinding? = null
-    private val binding get() = _binding!!
+class EditAnnouncementActionDialogFragment : BaseEditActionDialogFragment(), ActionEditorDialog {
     private lateinit var action: Action
     private var onActionUpdatedListener: ((Action) -> Unit)? = null
 
@@ -29,7 +25,7 @@ class EditAnnouncementActionDialogFragment : DialogFragment(), ActionEditorDialo
         _binding = FragmentEditAnnouncementActionBinding.inflate(layoutInflater)
 
         try {
-            action = requireArguments().getSerializable(ARG_ACTION) as? Action
+            action = requireArguments().getParcelable<Action>(ARG_ACTION)
                 ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
 
             Timber.d("EditAnnouncementActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
@@ -41,13 +37,17 @@ class EditAnnouncementActionDialogFragment : DialogFragment(), ActionEditorDialo
             e.printStackTrace()
         }
 
-        return AlertDialog.Builder(requireContext())
-            .setTitle("Configurar Anuncio")
+        val dialog = AlertDialog.Builder(requireContext())
             .setView(binding.root)
+            .setTitle("Configurar Anuncio")
             .setPositiveButton("Guardar") { _, _ ->
                 Timber.d("EditAnnouncementActionDialogFragment: Botón Guardar pulsado")
                 saveAction()
             }
+
+        return super.onCreateDialog(savedInstanceState)
+    }
+
             .setNegativeButton("Cancelar") { _, _ ->
                 Timber.d("EditAnnouncementActionDialogFragment: Botón Cancelar pulsado")
                 dismiss()
@@ -79,7 +79,7 @@ class EditAnnouncementActionDialogFragment : DialogFragment(), ActionEditorDialo
             })
 
             // Eliminamos el listener del botón ya que ahora usamos los botones del AlertDialog
-            btnSave.visibility = View.GONE
+            binding.btnSave.visibility = View.GONE
         }
     }
 

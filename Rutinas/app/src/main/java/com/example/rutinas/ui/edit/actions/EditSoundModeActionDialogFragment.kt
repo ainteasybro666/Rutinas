@@ -11,52 +11,38 @@ import kotlinx.parcelize.Parcelize
 import timber.log.Timber
 
 @Parcelize
-class EditSoundModeActionDialogFragment : DialogFragment(), Parcelable {
+class EditSoundModeActionDialogFragment : DialogFragment(), Parcelable, ActionEditorDialog {
     private var _binding: FragmentEditSoundModeActionBinding? = null
     private val binding get() = _binding!!
     private lateinit var action: Action
-    private var onActionUpdatedListener: ((Action) -> Unit)? = null
+    override var onActionUpdatedListener: ((Action) -> Unit)? = null
 
-    fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
-        onActionUpdatedListener = listener
+    override fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         Timber.d("EditSoundModeActionDialogFragment: onCreateDialog() llamado")
         _binding = FragmentEditSoundModeActionBinding.inflate(layoutInflater)
 
-        try {
-            action = requireArguments().getParcelable(ARG_ACTION)
-                ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
+        action = requireArguments().getParcelable(ARG_ACTION)
+            ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
 
-            Timber.d("EditSoundModeActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
+        Timber.d("EditSoundModeActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
 
-            loadActionData()
+        loadActionData()
 
-            return AlertDialog.Builder(requireContext())
-                .setTitle("Modo de Sonido")
-                .setView(binding.root)
-                .setPositiveButton("Guardar") { _, _ ->
-                    Timber.d("EditSoundModeActionDialogFragment: Botón Guardar pulsado")
-                    saveAction()
-                }
-                .setNegativeButton("Cancelar") { _, _ ->
-                    Timber.d("EditSoundModeActionDialogFragment: Botón Cancelar pulsado")
-                }
-                .create()
-        } catch (e: Exception) {
-            Timber.e("EditSoundModeActionDialogFragment: Error en onCreateDialog - ${e.message}")
-            e.printStackTrace()
-
-            // Crear un diálogo de error en caso de fallo
-            return AlertDialog.Builder(requireContext())
-                .setTitle("Error")
-                .setMessage("No se pudo cargar la acción: ${e.message}")
-                .setPositiveButton("Aceptar") { _, _ ->
-                    dismiss()
-                }
-                .create()
-        }
+        val dialog =  super.onCreateDialog(savedInstanceState) as AlertDialog
+        return AlertDialog.Builder(requireContext())
+            .setTitle("Modo de Sonido")
+            .setView(binding.root)
+            .setPositiveButton("Guardar") { _, _ ->
+                Timber.d("EditSoundModeActionDialogFragment: Botón Guardar pulsado")
+                saveAction()
+            }
+            .setNegativeButton("Cancelar") { _, _ ->
+                Timber.d("EditSoundModeActionDialogFragment: Botón Cancelar pulsado")
+            }
+            .create()
     }
 
     private fun loadActionData() {

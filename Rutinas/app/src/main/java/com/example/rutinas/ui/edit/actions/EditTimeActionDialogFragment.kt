@@ -3,7 +3,6 @@ package com.example.rutinas.ui.edit.actions
 import android.app.AlertDialog
 import android.app.Dialog
 import android.os.Bundle
-import android.os.Parcelable
 import androidx.fragment.app.DialogFragment
 import com.example.rutinas.data.model.Action
 import com.example.rutinas.databinding.FragmentEditTimeActionBinding
@@ -11,12 +10,7 @@ import kotlinx.parcelize.Parcelize
 import timber.log.Timber
 
 @Parcelize
-class EditTimeActionDialogFragment : DialogFragment(), Parcelable {
-    private var _binding: FragmentEditTimeActionBinding? = null
-    private val binding get() = _binding!!
-    private lateinit var action: Action
-    private var onActionUpdatedListener: ((Action) -> Unit)? = null
-
+class EditTimeActionDialogFragment : DialogFragment(), ActionEditorDialog {
     fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
         onActionUpdatedListener = listener
     }
@@ -26,7 +20,7 @@ class EditTimeActionDialogFragment : DialogFragment(), Parcelable {
         _binding = FragmentEditTimeActionBinding.inflate(layoutInflater)
 
         try {
-            action = requireArguments().getSerializable(ARG_ACTION) as? Action
+            action = requireArguments().getParcelable<Action>(ARG_ACTION)
                 ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
 
             Timber.d("EditTimeActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
@@ -34,29 +28,19 @@ class EditTimeActionDialogFragment : DialogFragment(), Parcelable {
             setupUI()
             loadActionData()
 
-            return AlertDialog.Builder(requireContext())
-                .setTitle("Configurar Hora")
-                .setView(binding.root)
-                .setPositiveButton("Guardar") { _, _ ->
-                    Timber.d("EditTimeActionDialogFragment: Botón Guardar pulsado")
-                    saveAction()
-                }
-                .setNegativeButton("Cancelar") { _, _ ->
-                    Timber.d("EditTimeActionDialogFragment: Botón Cancelar pulsado")
-                }
+            val dialog = AlertDialog.Builder(requireContext())
+                .setTitle("Configurar Hora").setView(binding.root)
+                .setPositiveButton("Guardar") { _, _ -> saveAction() }
+                .setNegativeButton("Cancelar", null)
                 .create()
-        } catch (e: Exception) {
-            Timber.e("EditTimeActionDialogFragment: Error en onCreateDialog - ${e.message}")
-            e.printStackTrace()
+            return dialog
+        } catch (e: Exception){
+            Timber.e("EditTimeActionDialogFragment: Error creating dialog - ${e.message}")
 
-            // Crear un diálogo de error en caso de fallo
-            return AlertDialog.Builder(requireContext())
-                .setTitle("Error")
-                .setMessage("No se pudo cargar la acción: ${e.message}")
-                .setPositiveButton("Aceptar") { _, _ ->
-                    dismiss()
-                }
+            val dialog = AlertDialog.Builder(requireContext()).setTitle("Error").setMessage("Failed to load action")
+                .setPositiveButton("OK", null)
                 .create()
+            return dialog
         }
     }
 

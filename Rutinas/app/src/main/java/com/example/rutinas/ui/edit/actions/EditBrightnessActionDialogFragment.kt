@@ -1,12 +1,10 @@
 package com.example.rutinas.ui.edit.actions
 
 import android.app.Dialog
+import android.content.DialogInterface
 import android.os.Bundle
-import android.os.Parcelable
-import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
-import android.widget.SeekBar
+import android.widget.SeekBar.OnSeekBarChangeListener
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.example.rutinas.data.model.Action
@@ -14,8 +12,7 @@ import com.example.rutinas.databinding.FragmentEditBrightnessActionBinding
 import kotlinx.parcelize.Parcelize
 import timber.log.Timber
 
-@Parcelize
-class EditBrightnessActionDialogFragment : DialogFragment(), ActionEditorDialog, Parcelable {
+class EditBrightnessActionDialogFragment : BaseEditActionDialogFragment(), ActionEditorDialog {
     private var _binding: FragmentEditBrightnessActionBinding? = null
     private val binding get() = _binding!!
     private lateinit var action: Action
@@ -26,11 +23,11 @@ class EditBrightnessActionDialogFragment : DialogFragment(), ActionEditorDialog,
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        Timber.d("EditBrightnessActionDialogFragment: onCreateDialog() llamado")
+        val dialog = super.onCreateDialog(savedInstanceState) as AlertDialog
         _binding = FragmentEditBrightnessActionBinding.inflate(layoutInflater)
 
         try {
-            action = requireArguments().getSerializable(ARG_ACTION) as? Action
+            action = requireArguments().getParcelable<Action>(ARG_ACTION)
                 ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
 
             Timber.d("EditBrightnessActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
@@ -38,22 +35,25 @@ class EditBrightnessActionDialogFragment : DialogFragment(), ActionEditorDialog,
             setupUI()
             loadActionData()
         } catch (e: Exception) {
-            Timber.e("EditBrightnessActionDialogFragment: Error al obtener la acción - ${e.message}")
-            e.printStackTrace()
+            return showErrorDialog(e.message ?: "Unknown error")
         }
 
-        return AlertDialog.Builder(requireContext())
-            .setTitle("Ajustar Brillo")
-            .setView(binding.root)
-            .setPositiveButton("Guardar") { _, _ ->
-                Timber.d("EditBrightnessActionDialogFragment: Botón Guardar pulsado")
-                saveAction()
-            }
-            .setNegativeButton("Cancelar") { _, _ ->
-                Timber.d("EditBrightnessActionDialogFragment: Botón Cancelar pulsado")
-                dismiss()
-            }
-            .create()
+        dialog.setView(binding.root)
+        dialog.setTitle("Ajustar Brillo")
+        dialog.setButton(
+            DialogInterface.BUTTON_POSITIVE, "Guardar"
+        ) { _, _ ->
+            Timber.d("EditBrightnessActionDialogFragment: Botón Guardar pulsado")
+            saveAction()
+        }
+        dialog.setButton(
+            DialogInterface.BUTTON_NEGATIVE, "Cancelar"
+        ) { _, _ ->
+            Timber.d("EditBrightnessActionDialogFragment: Botón Cancelar pulsado")
+            dismiss()
+        }
+
+        return dialog
     }
 
     private fun setupUI() {
@@ -61,18 +61,12 @@ class EditBrightnessActionDialogFragment : DialogFragment(), ActionEditorDialog,
         with(binding) {
             seekBarBrightness.max = 100
             seekBarBrightness.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                     Timber.d("EditBrightnessActionDialogFragment: Brillo cambiado a $progress%")
                     tvBrightnessValue.text = "Brillo: $progress%"
                 }
-
-                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-            })
-
-            btnPreview.setOnClickListener {
-                Timber.d("EditBrightnessActionDialogFragment: Botón Previsualizar pulsado")
-                previewBrightness()
+                override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
             }
         }
     }
@@ -90,20 +84,6 @@ class EditBrightnessActionDialogFragment : DialogFragment(), ActionEditorDialog,
             }
         } catch (e: Exception) {
             Timber.e("EditBrightnessActionDialogFragment: Error al cargar datos - ${e.message}")
-        }
-    }
-
-    private fun previewBrightness() {
-        Timber.d("EditBrightnessActionDialogFragment: previewBrightness() llamado")
-        try {
-            val brightness = binding.seekBarBrightness.progress
-
-            // Aquí iría el código para previsualizar el brillo
-            // Por ejemplo, cambiar temporalmente el brillo de la pantalla
-
-            Timber.d("EditBrightnessActionDialogFragment: Previsualizando brillo al $brightness%")
-        } catch (e: Exception) {
-            Timber.e("EditBrightnessActionDialogFragment: Error al previsualizar brillo - ${e.message}")
         }
     }
 

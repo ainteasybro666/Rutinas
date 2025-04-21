@@ -102,10 +102,9 @@ class AddActionDialogFragment : DialogFragment() {
 
                     actionView.setOnClickListener {
                         Timber.d("AddActionDialogFragment: Acción seleccionada: ${action.name}")
-                        val newAction = Action(
-                            uuid = UUID.randomUUID().toString(), //  Usa UUID
-                            routineId = 0, //  routineId se asigna al guardar la rutina
-                            type = action.type,
+                        val newAction = Action.createAction(
+                            routineId = 0,
+                            actionType = action.type,
                             data = emptyMap(),
                             executionOrder = 0
                         )
@@ -142,5 +141,5 @@ class AddActionDialogFragment : DialogFragment() {
 
     // Clases de datos para categorías y acciones
     data class Category(val name: String, val actions: List<ActionItem>)
-    data class ActionItem(val type: String, val name: String, val iconResId: Int)
+    data class ActionItem(val type: ActionType, val name: String, val iconResId: Int)
 }

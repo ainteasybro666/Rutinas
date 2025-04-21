@@ -149,14 +149,14 @@ class RoutineEditFragment : BaseFragment(),
 
     private fun navigateToEditAction(action: Action) {
         val editFragment = when (action.type) {
-            ActionType.ALARM.name -> EditAlarmActionDialogFragment.newInstance(action)
-            ActionType.ANNOUNCEMENT.name -> EditAnnouncementActionDialogFragment.newInstance(action)
-            ActionType.BRIGHTNESS.name -> EditBrightnessActionDialogFragment.newInstance(action)
-            ActionType.VOLUME.name -> EditVolumeActionDialogFragment.newInstance(action)
-            ActionType.SOUND_MODE.name -> EditSoundModeActionDialogFragment.newInstance(action)
-            ActionType.TIME.name -> EditTimeActionDialogFragment.newInstance(action)
-            ActionType.NOTIFICATIONS.name -> EditReadNotificationsActionDialogFragment.newInstance(action)
-            null -> throw IllegalArgumentException("El tipo de acción no puede ser nulo")
+            ActionType.ALARM -> EditAlarmActionDialogFragment.newInstance(action)
+            ActionType.ANNOUNCEMENT -> EditAnnouncementActionDialogFragment.newInstance(action)
+            ActionType.BRIGHTNESS -> EditBrightnessActionDialogFragment.newInstance(action)
+            ActionType.VOLUME -> EditVolumeActionDialogFragment.newInstance(action)
+            ActionType.SOUND_MODE -> EditSoundModeActionDialogFragment.newInstance(action)
+            ActionType.TIME -> EditTimeActionDialogFragment.newInstance(action)
+            ActionType.READ_NOTIFICATIONS -> EditReadNotificationsActionDialogFragment.newInstance(action)
+            ActionType.PAUSE -> EditPauseActionDialogFragment.newInstance(action)
             else -> throw IllegalArgumentException("Tipo no soportado: ${action.type}")
         }
 

@@ -1,6 +1,5 @@
 package com.example.rutinas.ui.edit.actions
 
-import android.app.AlertDialog
 import android.app.Dialog
 import android.os.Bundle
 import android.os.Parcelable
@@ -8,13 +7,14 @@ import android.view.View
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.fragment.app.DialogFragment
+import androidx.appcompat.app.AlertDialog
 import com.example.rutinas.data.model.Action
 import com.example.rutinas.databinding.FragmentEditVolumeActionBinding
 import kotlinx.parcelize.Parcelize
 import timber.log.Timber
 
 @Parcelize
-class EditVolumeActionDialogFragment : DialogFragment(), Parcelable {
+class EditVolumeActionDialogFragment : DialogFragment(), Parcelable, ActionEditorDialog {
     private var _binding: FragmentEditVolumeActionBinding? = null
     private val binding get() = _binding!!
     private lateinit var action: Action
@@ -29,7 +29,7 @@ class EditVolumeActionDialogFragment : DialogFragment(), Parcelable {
         _binding = FragmentEditVolumeActionBinding.inflate(layoutInflater)
 
         try {
-            action = requireArguments().getSerializable(ARG_ACTION) as? Action
+            action = requireArguments().getParcelable<Action>(ARG_ACTION)
                 ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
 
             Timber.d("EditVolumeActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
@@ -37,17 +37,22 @@ class EditVolumeActionDialogFragment : DialogFragment(), Parcelable {
             setupUI()
             loadActionData()
 
-            return AlertDialog.Builder(requireContext())
-                .setTitle("Ajustar Volumen")
-                .setView(binding.root)
-                .setPositiveButton("Guardar") { _, _ ->
-                    Timber.d("EditVolumeActionDialogFragment: Botón Guardar pulsado")
-                    saveAction()
-                }
-                .setNegativeButton("Cancelar") { _, _ ->
-                    Timber.d("EditVolumeActionDialogFragment: Botón Cancelar pulsado")
-                }
-                .create()
+            val dialog =  super.onCreateDialog(savedInstanceState) as AlertDialog
+            val builder = AlertDialog.Builder(requireContext())
+            builder.setTitle("Ajustar Volumen")
+            builder.setView(binding.root)
+            builder.setPositiveButton("Guardar") { _, _ ->
+                Timber.d("EditVolumeActionDialogFragment: Botón Guardar pulsado")
+                saveAction()
+            }
+            builder.setNegativeButton("Cancelar") { _, _ ->
+                Timber.d("EditVolumeActionDialogFragment: Botón Cancelar pulsado")
+            }
+            dialog.setView(builder.create().requireViewById(android.R.id.content))
+
+            return dialog
+
+
         } catch (e: Exception) {
             Timber.e("EditVolumeActionDialogFragment: Error en onCreateDialog - ${e.message}")
             e.printStackTrace()

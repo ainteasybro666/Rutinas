@@ -42,35 +42,43 @@ data class Action(
 
     // Propiedades calculadas para la UI
     val title: String
-        get() = when (ActionType.fromString(type)) {
+        get() = when (type) {
             ActionType.ANNOUNCEMENT -> "Anuncio"
             ActionType.ALARM -> "Alarma"
-            ActionType.NOTIFICATIONS -> "Leer Notificaciones"
+            ActionType.READ_NOTIFICATIONS -> "Leer Notificaciones"
             ActionType.TIME -> "Decir Hora"
             ActionType.VOLUME -> "Ajustar Volumen"
             ActionType.BRIGHTNESS -> "Ajustar Brillo"
             ActionType.SOUND_MODE -> "Modo de Sonido"
+            ActionType.PAUSE -> "Pausa"
+            else -> "Acción Desconocida"
         }
 
     val description: String
-        get() = when (ActionType.fromString(type)) {
+        get() = when (type) {
             ActionType.ANNOUNCEMENT -> data["message"] as? String ?: "Sin mensaje"
-            ActionType.ALARM -> "Alarma: ${data["time"] ?: "No configurada"}"
-            ActionType.NOTIFICATIONS -> "Leer notificaciones activas"
+            ActionType.ALARM -> "Alarma: ${data["time"]?.toString() ?: "No configurada"}"
+            ActionType.READ_NOTIFICATIONS -> "Leer notificaciones activas"
             ActionType.TIME -> "Informar hora actual"
             ActionType.VOLUME -> {
-                val volumes = mutableListOf<String>()
-                if (data["mediaVolume"] != null) volumes.add("Media")
-                if (data["ringtoneVolume"] != null) volumes.add("Ringtone")
-                if (data["alarmVolume"] != null) volumes.add("Alarma")
-                "Ajustar volumen: ${volumes.joinToString(", ")}"
+                val mediaVolume = data["mediaVolume"] != null
+                val ringtoneVolume = data["ringtoneVolume"] != null
+                val alarmVolume = data["alarmVolume"] != null
+
+                val streams = mutableListOf<String>()
+                if (mediaVolume) streams.add("Media")
+                if (ringtoneVolume) streams.add("Ringtone")
+                if (alarmVolume) streams.add("Alarma")
+
+                if (streams.isEmpty()) "Sin cambios en el volumen" else "Ajustar volumen: ${streams.joinToString(", ")}"
             }
             ActionType.BRIGHTNESS -> "Brillo: ${data["level"]}%"
-            ActionType.SOUND_MODE -> when (data["mode"]) {
-                "silent" -> "Modo silencioso"
-                "vibrate" -> "Modo vibración"
-                else -> "Modo no especificado"
-            }
+            ActionType.SOUND_MODE -> if (data["mode"] == "silent") "Modo silencioso" else if (data["mode"] == "vibrate") "Modo vibración" else "Modo normal"
+            ActionType.PAUSE -> if (data["pauseDuration"] != null) {
+                val duration = (data["pauseDuration"] as? Number)?.toLong() ?: 0
+                if (duration < 1000) "Pausa de $duration milisegundos" else "Pausa de ${duration.div(1000)} segundos"
+            } else "Pausa"
+            else -> "Unknown description"
         }
 
     companion object {
