@@ -20,7 +20,7 @@ class EditVolumeActionDialogFragment : DialogFragment(), Parcelable, ActionEdito
     private lateinit var action: Action
     private var onActionUpdatedListener: ((Action) -> Unit)? = null
 
-    fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
+    override fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
         onActionUpdatedListener = listener
     }
 

@@ -16,6 +16,7 @@ import com.example.rutinas.data.model.Action
 import com.example.rutinas.data.model.ActionType
 import com.example.rutinas.domain.Routine
 import com.example.rutinas.util.NotificationReader // Assuming this exists
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -24,8 +25,11 @@ import timber.log.Timber
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import javax.inject.Inject
 
-class RoutineExecutor(private val context: Context) {
+class RoutineExecutor @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
 
     companion object {
         private const val CHANNEL_ID = "RoutineNotifications"

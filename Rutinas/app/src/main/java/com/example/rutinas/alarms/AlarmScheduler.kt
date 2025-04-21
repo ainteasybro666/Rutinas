@@ -9,10 +9,14 @@ import com.example.rutinas.domain.Routine
 import com.example.rutinas.data.model.RoutineEntity
 import com.example.rutinas.data.model.Trigger
 import com.example.rutinas.receivers.AlarmReceiver
+import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
 import java.util.Calendar
+import javax.inject.Inject
 
-class AlarmScheduler(private val context: Context) {
+class AlarmScheduler @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
 
     private val alarmManager: AlarmManager =
         context.getSystemService(Context.ALARM_SERVICE) as AlarmManager

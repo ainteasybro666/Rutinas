@@ -25,7 +25,7 @@ import com.example.rutinas.utils.PermissionManager
 import com.example.rutinas.utils.Resource
 import com.example.rutinas.utils.showErrorSnackbar
 import com.example.rutinas.utils.showSuccessSnackbar
-import com.google.android.material.snackbar.Snackbar
+import com.example.rutinas.ui.edit.dialogs.TriggerTypeDialog
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -53,9 +53,6 @@ class RoutineEditFragment : BaseFragment(),
     private lateinit var triggerAdapter: TriggerAdapter
     private lateinit var actionAdapter: ActionAdapter
 
-    /**
-     * Implementa la función para inflar el binding.
-     */
     override fun inflateBinding(
         inflater: LayoutInflater,
         container: ViewGroup?
@@ -63,16 +60,20 @@ class RoutineEditFragment : BaseFragment(),
         return FragmentRoutineEditBinding.inflate(inflater, container, false)
     }
 
-    // Propiedad tipada para facilitar el uso del binding en este fragmento
     private val vb: FragmentRoutineEditBinding
         get() = binding as FragmentRoutineEditBinding
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        // Ocultar navegación y botón flotante al editar
+        hideBottomNavMenu()
+        hideFloatingButton()
+
         setupUI()
-        setupObservers()
         setupTriggersRecyclerView()
         setupActionsRecyclerView()
+        setupObservers()
 
         // Cargar datos si se está editando una rutina existente
         arguments?.getString("routine_uuid")?.let { uuid ->
@@ -87,7 +88,6 @@ class RoutineEditFragment : BaseFragment(),
         showFloatingButton()
     }
 
-    // Ejemplo de implementación en algunos métodos (usa "vb" en lugar de "binding")
     private fun setupUI() {
         with(vb) {
             toolbar.setNavigationIcon(R.drawable.ic_back)
@@ -126,7 +126,7 @@ class RoutineEditFragment : BaseFragment(),
 
     private fun setupActionsRecyclerView() {
         actionAdapter = ActionAdapter(
-            viewModel,
+            viewModel = viewModel,
             onActionDeleted = { action -> viewModel.removeAction(action) },
             onActionClicked = ::navigateToEditAction
         ).apply {
@@ -149,15 +149,15 @@ class RoutineEditFragment : BaseFragment(),
 
     private fun navigateToEditAction(action: Action) {
         val editFragment = when (action.type) {
-            ActionType.ALARM.name -> EditAlarmActionDialogFragment.newInstance(action)
-            ActionType.ANNOUNCEMENT.name -> EditAnnouncementActionDialogFragment.newInstance(action)
-            ActionType.BRIGHTNESS.name -> EditBrightnessActionDialogFragment.newInstance(action)
-            ActionType.VOLUME.name -> EditVolumeActionDialogFragment.newInstance(action)
-            ActionType.SOUND_MODE.name -> EditSoundModeActionDialogFragment.newInstance(action)
-            ActionType.TIME.name -> EditTimeActionDialogFragment.newInstance(action)
-            ActionType.READ_NOTIFICATIONS.name -> EditReadNotificationsActionDialogFragment.newInstance(action)
-            null -> throw IllegalArgumentException("El tipo de acción no puede ser nulo")
-            else -> throw IllegalArgumentException("Tipo no soportado: ${action.type}")
+            ActionType.ALARM -> EditAlarmActionDialogFragment.newInstance(action)
+            ActionType.ANNOUNCEMENT -> EditAnnouncementActionDialogFragment.newInstance(action)
+            ActionType.BRIGHTNESS -> EditBrightnessActionDialogFragment.newInstance(action)
+            ActionType.VOLUME -> EditVolumeActionDialogFragment.newInstance(action)
+            ActionType.SOUND_MODE -> EditSoundModeActionDialogFragment.newInstance(action)
+            ActionType.TIME -> EditTimeActionDialogFragment.newInstance(action)
+            ActionType.READ_NOTIFICATIONS -> EditReadNotificationsActionDialogFragment.newInstance(action)
+            ActionType.PAUSE -> EditPauseActionDialogFragment.newInstance(action)
+            else -> throw IllegalArgumentException("Tipo no soportado: ${'$'}{action.type}")
         }
 
         (editFragment as? BaseEditActionDialogFragment)?.setOnActionUpdatedListener { updatedAction ->
@@ -184,26 +184,30 @@ class RoutineEditFragment : BaseFragment(),
         }
 
         lifecycleScope.launch {
-            viewModel.actions.collect { actions ->
-                Timber.d("Lista de acciones actualizada: $actions")
-                actionAdapter.submitList(actions)
-                updateEmptyStateVisibility()
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.actions.collect { actions ->
+                    Timber.d("Lista de acciones actualizada: $actions")
+                    actionAdapter.submitList(actions)
+                    updateEmptyStateVisibility()
+                }
             }
         }
 
         lifecycleScope.launch {
-            viewModel.saveResult.collect { result ->
-                when (result) {
-                    is Resource.Success<Long> -> {
-                        Timber.d("Rutina guardada con éxito, ID: ${result.data}")
-                        requireView().showSuccessSnackbar("Rutina guardada")
-                        requireActivity().onBackPressedDispatcher.onBackPressed()
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.saveResult.collect { result ->
+                    when (result) {
+                        is Resource.Success<Long> -> {
+                            Timber.d("Rutina guardada con éxito, ID: ${'$'}{result.data}")
+                            requireView().showSuccessSnackbar("Rutina guardada")
+                            requireActivity().onBackPressedDispatcher.onBackPressed()
+                        }
+                        is Resource.Error -> {
+                            Timber.e("Error al guardar rutina: ${'$'}{result.message}")
+                            requireView().showErrorSnackbar(result.message ?: "Error desconocido")
+                        }
+                        Resource.Loading -> { /* Mostrar loader si lo deseas */ }
                     }
-                    is Resource.Error -> {
-                        Timber.e("Error al guardar rutina: ${result.message}")
-                        requireView().showErrorSnackbar(result.message ?: "Error desconocido")
-                    }
-                    Resource.Loading -> { /* Opcional: mostrar loader */ }
                 }
             }
         }
@@ -212,7 +216,7 @@ class RoutineEditFragment : BaseFragment(),
     private fun saveRoutine() {
         val name = vb.etRoutineName.text.toString().trim()
         if (validateForm(name)) {
-            Timber.d("Guardando rutina con nombre: $name, triggers: $triggersList, acciones: ${viewModel.actions.value}")
+            Timber.d("Guardando rutina con nombre: $name, triggers: ${'$'}triggersList, acciones: ${'$'}{viewModel.actions.value}")
             viewModel.saveRoutine(
                 name = name,
                 triggers = triggersList,
@@ -223,22 +227,18 @@ class RoutineEditFragment : BaseFragment(),
 
     private fun validateForm(name: String): Boolean {
         var isValid = true
-
         if (name.isEmpty()) {
             vb.etRoutineName.error = "Nombre requerido"
             isValid = false
         }
-
         if (triggersList.isEmpty()) {
             requireView().showErrorSnackbar("Agrega al menos un trigger")
             isValid = false
         }
-
         if (viewModel.actions.value.isNullOrEmpty()) {
             requireView().showErrorSnackbar("Agrega al menos una acción")
             isValid = false
         }
-
         return isValid
     }
 
@@ -257,56 +257,6 @@ class RoutineEditFragment : BaseFragment(),
         }
     }
 
-    // Implementación de los Trigger Listeners
-    override fun onTriggerSelected(triggerType: TriggerTypeDialog.TriggerType) {
-        when (triggerType) {
-            TriggerTypeDialog.TriggerType.TIME -> {
-                Timber.d("Trigger de tiempo seleccionado, mostrando TimeTriggerConfigDialog")
-                TimeTriggerConfigDialog().apply {
-                    setTimeTriggerConfigListener(this@RoutineEditFragment)
-                    show(childFragmentManager, "TimeTriggerConfigDialog")
-                }
-            }
-            TriggerTypeDialog.TriggerType.CALENDAR -> {
-                Timber.d("Trigger de calendario seleccionado, mostrando CalendarTriggerDialog")
-                CalendarTriggerDialog().apply {
-                    setCalendarTriggerListener(this@RoutineEditFragment)
-                    show(childFragmentManager, "CalendarTriggerDialog")
-                }
-            }
-            TriggerTypeDialog.TriggerType.LOCATION -> {
-                Timber.d("Trigger de ubicación seleccionado, mostrando LocationTriggerDialog")
-                LocationTriggerDialog().apply {
-                    setLocationTriggerListener(this@RoutineEditFragment)
-                    show(childFragmentManager, "LocationTriggerDialog")
-                }
-            }
-        }
-    }
-
-    override fun onCalendarTriggerConfigured(trigger: Trigger) {
-        Timber.d("Trigger de calendario configurado: $trigger")
-        triggersList.add(trigger)
-        triggerAdapter.notifyDataSetChanged()
-        updateEmptyStateVisibility()
-    }
-
-    override fun onLocationTriggerConfigured(trigger: Trigger) {
-        Timber.d("Trigger de ubicación configurado: $trigger")
-        triggersList.add(trigger)
-        triggerAdapter.notifyDataSetChanged()
-        updateEmptyStateVisibility()
-    }
-
-    // New listener for TimeTriggerConfigDialog
-    override fun onTimeTriggerConfigured(trigger: Trigger) {
-        Timber.d("Trigger de tiempo configurado: $trigger")
-        triggersList.add(trigger)
-        triggerAdapter.notifyDataSetChanged()
-        updateEmptyStateVisibility()
-    }
-
-    // Helpers
     private fun createItemDecoration() = object : RecyclerView.ItemDecoration() {
         override fun getItemOffsets(
             outRect: Rect,

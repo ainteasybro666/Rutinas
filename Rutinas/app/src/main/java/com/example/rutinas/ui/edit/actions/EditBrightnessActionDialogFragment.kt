@@ -6,52 +6,51 @@ import android.os.Bundle
 import android.view.View
 import android.widget.SeekBar.OnSeekBarChangeListener
 import androidx.appcompat.app.AlertDialog
+import android.os.Parcelable
+import android.widget.SeekBar
 import androidx.fragment.app.DialogFragment
 import com.example.rutinas.data.model.Action
 import com.example.rutinas.databinding.FragmentEditBrightnessActionBinding
 import kotlinx.parcelize.Parcelize
 import timber.log.Timber
 
-class EditBrightnessActionDialogFragment : BaseEditActionDialogFragment(), ActionEditorDialog {
+@Parcelize
+class EditBrightnessActionDialogFragment
+    : BaseEditActionDialogFragment(),
+    ActionEditorDialog,
+    Parcelable {
     private var _binding: FragmentEditBrightnessActionBinding? = null
     private val binding get() = _binding!!
-    private lateinit var action: Action
-    private var onActionUpdatedListener: ((Action) -> Unit)? = null
 
     override fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
-        onActionUpdatedListener = listener
+        actionUpdateListener = listener
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val dialog = super.onCreateDialog(savedInstanceState) as AlertDialog
+        super.onCreateDialog(savedInstanceState)
+        Timber.d("EditBrightnessActionDialogFragment: onCreateDialog() llamado")
         _binding = FragmentEditBrightnessActionBinding.inflate(layoutInflater)
 
-        try {
-            action = requireArguments().getParcelable<Action>(ARG_ACTION)
-                ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
+        action = requireArguments().getParcelable<Action>(ARG_ACTION)
+            ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
 
-            Timber.d("EditBrightnessActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
+        Timber.d("EditBrightnessActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
 
-            setupUI()
-            loadActionData()
-        } catch (e: Exception) {
-            return showErrorDialog(e.message ?: "Unknown error")
-        }
+        setupUI()
+        loadActionData()
 
-        dialog.setView(binding.root)
-        dialog.setTitle("Ajustar Brillo")
-        dialog.setButton(
-            DialogInterface.BUTTON_POSITIVE, "Guardar"
-        ) { _, _ ->
-            Timber.d("EditBrightnessActionDialogFragment: Botón Guardar pulsado")
-            saveAction()
-        }
-        dialog.setButton(
-            DialogInterface.BUTTON_NEGATIVE, "Cancelar"
-        ) { _, _ ->
-            Timber.d("EditBrightnessActionDialogFragment: Botón Cancelar pulsado")
-            dismiss()
-        }
+        val dialog = AlertDialog.Builder(requireContext())
+            .setTitle("Ajustar Brillo")
+            .setView(binding.root)
+            .setPositiveButton("Guardar") { _, _ ->
+                Timber.d("EditBrightnessActionDialogFragment: Botón Guardar pulsado")
+                saveAction()
+            }
+            .setNegativeButton("Cancelar") { _, _ ->
+                Timber.d("EditBrightnessActionDialogFragment: Botón Cancelar pulsado")
+                dismiss()
+            }
+            .create()
 
         return dialog
     }
@@ -67,7 +66,8 @@ class EditBrightnessActionDialogFragment : BaseEditActionDialogFragment(), Actio
                 }
                 override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
                 override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            }
+                }
+            )
         }
     }
 
@@ -100,7 +100,7 @@ class EditBrightnessActionDialogFragment : BaseEditActionDialogFragment(), Actio
                 )
             )
 
-            onActionUpdatedListener?.invoke(updatedAction)
+            actionUpdateListener?.invoke(updatedAction)
             Timber.d("EditBrightnessActionDialogFragment: Acción actualizada y notificada")
         } catch (e: Exception) {
             Timber.e("EditBrightnessActionDialogFragment: Error al guardar acción - ${e.message}")

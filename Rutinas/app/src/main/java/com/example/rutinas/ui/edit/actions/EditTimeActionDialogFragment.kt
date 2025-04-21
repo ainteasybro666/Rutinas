@@ -3,6 +3,7 @@ package com.example.rutinas.ui.edit.actions
 import android.app.AlertDialog
 import android.app.Dialog
 import android.os.Bundle
+import android.os.Parcelable
 import androidx.fragment.app.DialogFragment
 import com.example.rutinas.data.model.Action
 import com.example.rutinas.databinding.FragmentEditTimeActionBinding
@@ -10,10 +11,16 @@ import kotlinx.parcelize.Parcelize
 import timber.log.Timber
 
 @Parcelize
-class EditTimeActionDialogFragment : DialogFragment(), ActionEditorDialog {
-    fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
-        onActionUpdatedListener = listener
+class EditTimeActionDialogFragment
+    : BaseEditActionDialogFragment(),      // hereda `action` y `listener`
+    ActionEditorDialog,
+    Parcelable {
+
+    override fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
+        actionUpdateListener = listener
     }
+    private var _binding: FragmentEditTimeActionBinding? = null
+    private val binding get() = _binding!!
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         Timber.d("EditTimeActionDialogFragment: onCreateDialog() llamado")
@@ -85,7 +92,7 @@ class EditTimeActionDialogFragment : DialogFragment(), ActionEditorDialog {
                 )
             )
 
-            onActionUpdatedListener?.invoke(updatedAction)
+            actionUpdateListener?.invoke(updatedAction)
             Timber.d("EditTimeActionDialogFragment: Acción actualizada y notificada")
         } catch (e: Exception) {
             Timber.e("EditTimeActionDialogFragment: Error al guardar acción - ${e.message}")

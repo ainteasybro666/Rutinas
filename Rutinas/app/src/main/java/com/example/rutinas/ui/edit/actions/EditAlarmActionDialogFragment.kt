@@ -15,14 +15,15 @@ import kotlinx.parcelize.Parcelize
 import timber.log.Timber
 
 @Parcelize
-class EditAlarmActionDialogFragment : BaseEditActionDialogFragment(), ActionEditorDialog, Parcelable {
+class EditAlarmActionDialogFragment :
+    BaseEditActionDialogFragment(),
+    ActionEditorDialog,
+    Parcelable {
     private var _binding: FragmentEditAlarmActionBinding? = null
     private val binding get() = _binding!!
-    private lateinit var action: Action
-    private var onActionUpdatedListener: ((Action) -> Unit)? = null
 
     override fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
-        onActionUpdatedListener = listener
+        actionUpdateListener = listener
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -112,7 +113,7 @@ class EditAlarmActionDialogFragment : BaseEditActionDialogFragment(), ActionEdit
                     "repeatEnabled" to repeatEnabled
                 )
             )
-            onActionUpdatedListener?.invoke(updatedAction)
+            actionUpdateListener?.invoke(updatedAction)
             Timber.d("EditAlarmActionDialogFragment: Acción actualizada y notificada")
         } catch (e: Exception) {
             Timber.e("EditAlarmActionDialogFragment: Error al guardar acción - ${e.message}")

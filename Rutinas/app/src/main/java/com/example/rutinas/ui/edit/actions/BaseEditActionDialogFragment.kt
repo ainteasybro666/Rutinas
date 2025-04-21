@@ -18,15 +18,13 @@ abstract class BaseEditActionDialogFragment : DialogFragment(), ActionEditorDial
 
     // To avoid showing the error dialog multiple times.
     private var errorDialogShown = false
-    protected var onActionUpdatedListener: ((Action) -> Unit)? = null
+    protected var actionUpdateListener: ((Action) -> Unit)? = null
 
     companion object {
         const val ARG_ACTION = "arg_action"
     }
 
     protected lateinit var action: Action
-
-    private var onActionUpdatedListener: ((Action) -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,6 +64,11 @@ abstract class BaseEditActionDialogFragment : DialogFragment(), ActionEditorDial
                 }.create()
         }
     }
-}
-}
+    protected fun showErrorDialog(message: String) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Error")
+            .setMessage(message)
+            .setPositiveButton("Aceptar", null)
+            .show()
+    }
 }

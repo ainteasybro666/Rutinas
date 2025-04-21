@@ -61,18 +61,18 @@ class AddActionDialogFragment : DialogFragment() {
             // Definir las categorías y acciones
             val categories = listOf(
                 Category("Comunicación", listOf(
-                    ActionItem(ActionType.ANNOUNCEMENT.name, "Anuncio", R.drawable.ic_announcement),
-                    ActionItem(ActionType.READ_NOTIFICATIONS.name, "Leer Notificaciones", R.drawable.ic_notifications)
+                    ActionItem(ActionType.ANNOUNCEMENT, "Anuncio", R.drawable.ic_announcement),
+                    ActionItem(ActionType.READ_NOTIFICATIONS, "Leer Notificaciones", R.drawable.ic_notifications)
                 )),
                 Category("Dispositivo", listOf(
-                    ActionItem(ActionType.BRIGHTNESS.name, "Ajustar Brillo", R.drawable.ic_brightness),
-                    ActionItem(ActionType.VOLUME.name, "Ajustar Volumen", R.drawable.ic_volume),
-                    ActionItem(ActionType.SOUND_MODE.name, "Modo de Sonido", R.drawable.ic_sound_mode)
+                    ActionItem(ActionType.BRIGHTNESS, "Ajustar Brillo", R.drawable.ic_brightness),
+                    ActionItem(ActionType.VOLUME, "Ajustar Volumen", R.drawable.ic_volume),
+                    ActionItem(ActionType.SOUND_MODE, "Modo de Sonido", R.drawable.ic_sound_mode)
                 )),
                 Category("Utilidades", listOf(
-                    ActionItem(ActionType.ALARM.name, "Alarma", R.drawable.ic_alarm),
-                    ActionItem(ActionType.TIME.name, "Decir la Hora", R.drawable.ic_time),
-                    ActionItem(ActionType.PAUSE.name, "Pausa", R.drawable.ic_pause)
+                    ActionItem(ActionType.ALARM, "Alarma", R.drawable.ic_alarm),
+                    ActionItem(ActionType.TIME, "Decir la Hora", R.drawable.ic_time),
+                    ActionItem(ActionType.PAUSE, "Pausa", R.drawable.ic_pause)
                 ))
             )
 

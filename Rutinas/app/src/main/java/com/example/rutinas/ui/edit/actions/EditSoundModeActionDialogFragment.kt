@@ -15,7 +15,7 @@ class EditSoundModeActionDialogFragment : DialogFragment(), Parcelable, ActionEd
     private var _binding: FragmentEditSoundModeActionBinding? = null
     private val binding get() = _binding!!
     private lateinit var action: Action
-    override var onActionUpdatedListener: ((Action) -> Unit)? = null
+    private var onActionUpdatedListener: ((Action) -> Unit)? = null
 
     override fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
     }
