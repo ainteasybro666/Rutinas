@@ -50,6 +50,8 @@ data class Action(
             ActionType.VOLUME -> "Ajustar Volumen"
             ActionType.BRIGHTNESS -> "Ajustar Brillo"
             ActionType.SOUND_MODE -> "Modo de Sonido"
+            ActionType.PAUSE -> "Pausa"
+            else -> "Sin título"
         }
 
     val description: String
@@ -71,6 +73,8 @@ data class Action(
                 "vibrate" -> "Modo vibración"
                 else -> "Modo no especificado"
             }
+            ActionType.PAUSE -> "Pausa: ${data["duration"]} segundos"
+            else -> "Sin descripción"
         }
 
     companion object {

@@ -4,6 +4,7 @@ import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -20,6 +21,35 @@ class AddActionDialogFragment : DialogFragment() {
     private var _binding: DialogActionSelectionBinding? = null
     private val binding get() = _binding!!
     private var onActionSelectedListener: ((Action) -> Unit)? = null
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        _binding = DialogActionSelectionBinding.inflate(inflater, container, false)
+        return binding.root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        setupDialog()
+    }
+
+    private fun setupDialog() {
+        Timber.d("Configurando diálogo en onViewCreated")
+        setupCategories()
+
+        dialog?.window?.setLayout(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT
+        )
+    }
+
+    private fun dismissSafe() {
+        if (isAdded) dismissAllowingStateLoss()
+    }
+
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         Timber.d("AddActionDialogFragment: onCreateDialog() llamado")
@@ -47,11 +77,9 @@ class AddActionDialogFragment : DialogFragment() {
     }
 
     private fun setupCategories() {
-        Timber.d("AddActionDialogFragment: setupCategories() llamado")
         try {
-            // Verificar si el contenedor existe
-            if (binding.categoriesContainer == null) {
-                Timber.e("AddActionDialogFragment: El contenedor categoriesContainer es nulo")
+            if (!isAdded || context == null) {
+                Timber.e("Contexto no disponible para setupCategories")
                 return
             }
 
@@ -120,8 +148,7 @@ class AddActionDialogFragment : DialogFragment() {
 
             Timber.d("AddActionDialogFragment: Categorías configuradas correctamente")
         } catch (e: Exception) {
-            Timber.e("AddActionDialogFragment: Error al configurar categorías - ${e.message}")
-            e.printStackTrace()
+            Timber.e("Error en setupCategories: ${e.javaClass.simpleName} - ${e.message}")
         }
     }
 

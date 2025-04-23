@@ -56,4 +56,8 @@ class CalendarTriggerDialog : DialogFragment() {
             dismiss()
         }
     }
+
+    companion object {
+        fun createInstance() = CalendarTriggerDialog()
+    }
 }

@@ -1,5 +1,6 @@
 package com.example.rutinas.ui.edit.dialogs
 
+import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -7,6 +8,7 @@ import android.view.ViewGroup
 import androidx.fragment.app.DialogFragment
 import com.example.rutinas.databinding.DialogTriggerTypesBinding
 import dagger.hilt.android.AndroidEntryPoint
+import timber.log.Timber
 
 @AndroidEntryPoint
 class TriggerTypeDialog : DialogFragment() {
@@ -44,9 +46,18 @@ class TriggerTypeDialog : DialogFragment() {
         }
     }
 
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+        Timber.d("TriggerTypeDialog adjuntado al contexto")
+    }
+
     private fun selectTrigger(type: TriggerType) {
-        listener?.onTriggerSelected(type)
-        dismiss()
+        if (isAdded && !isDetached) { // Verificación crítica
+            listener?.onTriggerSelected(type)
+            dismissAllowingStateLoss() // Dismiss seguro
+        } else {
+            Timber.e("No se puede seleccionar trigger: Diálogo no adjunto")
+        }
     }
 
     enum class TriggerType {
@@ -54,6 +65,6 @@ class TriggerTypeDialog : DialogFragment() {
     }
 
     companion object {
-        fun newInstance() = TriggerTypeDialog()
+        fun createInstance() = TriggerTypeDialog()
     }
 }

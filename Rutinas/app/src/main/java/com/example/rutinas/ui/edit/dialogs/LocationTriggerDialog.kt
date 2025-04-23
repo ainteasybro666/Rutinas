@@ -56,4 +56,8 @@ class LocationTriggerDialog : DialogFragment() {
             dismiss()
         }
     }
+
+    companion object {
+        fun createInstance() = LocationTriggerDialog()
+    }
 }

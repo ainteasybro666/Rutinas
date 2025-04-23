@@ -6,7 +6,9 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -95,14 +97,36 @@ class RoutineEditFragment : BaseFragment(),
             toolbar.title = "Editar Rutina"
 
             btnAddTrigger.setOnClickListener {
-                TriggerTypeDialog.newInstance().apply {
-                    setTriggerTypeListener(this@RoutineEditFragment)
-                    show(childFragmentManager, "TriggerTypeDialog")
+                if (canShowDialog()) { // Nueva función de validación
+                    TriggerTypeDialog.createInstance().apply {
+                        setTriggerTypeListener(this@RoutineEditFragment)
+                        showSafe(childFragmentManager) // Método seguro para mostrar
+                    }
                 }
             }
 
-            btnAddAction.setOnClickListener { showAddActionDialog() }
+            btnAddAction.setOnClickListener {
+                if (canShowDialog()) {
+                    showAddActionDialog()
+                }
+            }
             btnSaveRoutine.setOnClickListener { saveRoutine() }
+        }
+    }
+
+    private fun canShowDialog(): Boolean {
+        return isAdded && !isDetached && !isRemoving && context != null
+    }
+
+    private fun showAddActionDialog() {
+        if (!canShowDialog()) {
+            Timber.e("No se puede mostrar diálogo: Estado inválido del fragmento")
+            return
+        }
+
+        AddActionDialogFragment.newInstance().apply {
+            setOnActionSelectedListener { navigateToEditAction(it) }
+            showSafe(childFragmentManager) // Método seguro
         }
     }
 
@@ -139,14 +163,6 @@ class RoutineEditFragment : BaseFragment(),
         }
         updateEmptyStateVisibility()
     }
-
-    private fun showAddActionDialog() {
-        AddActionDialogFragment.newInstance().apply {
-            setOnActionSelectedListener { navigateToEditAction(it) }
-            show(childFragmentManager, "AddActionDialog")
-        }
-    }
-
     private fun navigateToEditAction(action: Action) {
         val editFragment = when (action.type) {
             ActionType.ALARM -> EditAlarmActionDialogFragment.newInstance(action)
@@ -164,6 +180,58 @@ class RoutineEditFragment : BaseFragment(),
             viewModel.updateAction(updatedAction)
         }
         editFragment.show(childFragmentManager, "EditActionDialog")
+    }
+
+    override fun onTriggerSelected(triggerType: TriggerTypeDialog.TriggerType) {
+        if (!isAdded || isDetached) {  // Verificación crítica añadida
+            Timber.e("onTriggerSelected: Fragment no adjunto")
+            return
+        }
+
+        val timeDialog = TimeTriggerConfigDialog.createInstance()
+        val calendarDialog = CalendarTriggerDialog.createInstance()
+        val locationDialog = LocationTriggerDialog.createInstance()
+
+        when (triggerType) {
+            TriggerTypeDialog.TriggerType.TIME -> {
+                timeDialog.setTimeTriggerConfigListener(this@RoutineEditFragment)
+                if (isAdded) timeDialog.show(childFragmentManager, "TimeTriggerConfigDialog")
+            }
+            TriggerTypeDialog.TriggerType.CALENDAR -> {
+                calendarDialog.setCalendarTriggerListener(this@RoutineEditFragment)
+                if (isAdded) calendarDialog.show(childFragmentManager, "CalendarTriggerDialog")
+            }
+            TriggerTypeDialog.TriggerType.LOCATION -> {
+                locationDialog.setLocationTriggerListener(this@RoutineEditFragment)
+                if (isAdded) locationDialog.show(childFragmentManager, "LocationTriggerDialog")
+            }
+        }
+    }
+
+
+
+
+
+
+    override fun onCalendarTriggerConfigured(trigger: Trigger) {
+        Timber.d("Trigger de calendario configurado: $trigger")
+        triggersList.add(trigger)
+        triggerAdapter.notifyDataSetChanged()
+        updateEmptyStateVisibility()
+    }
+
+    override fun onLocationTriggerConfigured(trigger: Trigger) {
+        Timber.d("Trigger de ubicación configurado: $trigger")
+        triggersList.add(trigger)
+        triggerAdapter.notifyDataSetChanged()
+        updateEmptyStateVisibility()
+    }
+
+    override fun onTimeTriggerConfigured(trigger: Trigger) {
+        Timber.d("Trigger de tiempo configurado: $trigger")
+        triggersList.add(trigger)
+        triggerAdapter.notifyDataSetChanged()
+        updateEmptyStateVisibility()
     }
 
     private fun setupObservers() {
@@ -243,6 +311,7 @@ class RoutineEditFragment : BaseFragment(),
     }
 
     private fun updateEmptyStateVisibility() {
+        if (!isAdded) return
         vb.apply {
             val hasTriggers = triggersList.isNotEmpty()
             val hasActions = !viewModel.actions.value.isNullOrEmpty()
@@ -285,5 +354,12 @@ class RoutineEditFragment : BaseFragment(),
 
     private fun showFloatingButton() {
         activity?.findViewById<View>(R.id.fab_add_routine)?.visibility = View.VISIBLE
+    }
+    private fun DialogFragment.showSafe(fm: FragmentManager) {
+        if (!canShowDialog() || fm.isDestroyed) {
+            Timber.e("No se puede mostrar diálogo: FragmentManager no válido")
+            return
+        }
+        show(fm, this::class.java.simpleName)
     }
 }

@@ -1,18 +1,14 @@
 package com.example.rutinas.ui.edit.dialogs
 
 import android.app.Dialog
+import android.content.Context
 import android.os.Bundle
-import androidx.preference.MultiSelectListPreference
 import android.view.LayoutInflater
 import android.view.View
-import android.widget.FrameLayout
-import android.widget.NumberPicker
-import android.widget.RadioGroup
-import android.widget.TimePicker
+import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
-import androidx.fragment.app.commit
-import androidx.preference.PreferenceFragmentCompat
+import androidx.core.view.children
 import com.example.rutinas.R
 import com.example.rutinas.data.model.Trigger
 import timber.log.Timber
@@ -54,7 +50,6 @@ class TimeTriggerConfigDialog : DialogFragment() {
                 R.id.weeklyRadioButton -> {
                     weeklyContainer.visibility = View.VISIBLE
                     dayOfMonthPicker.visibility = View.GONE
-                    showWeeklyPreferenceFragment()
                 }
                 R.id.monthlyRadioButton -> {
                     weeklyContainer.visibility = View.GONE
@@ -68,12 +63,14 @@ class TimeTriggerConfigDialog : DialogFragment() {
         }
 
         weeklyContainer.visibility = View.GONE
+        // Initially hide the weekly checkboxes
         dayOfMonthPicker.visibility = View.GONE
 
         return AlertDialog.Builder(requireContext())
             .setView(view)
             .setTitle("Configurar Trigger de Tiempo")
             .setPositiveButton("Aceptar") { _, _ ->
+                // Mover la creación del trigger ANTES de notificar al listener
                 val hour = timePicker.hour
                 val minute = timePicker.minute
                 val frequency = when (frequencyRadioGroup.checkedRadioButtonId) {
@@ -83,62 +80,69 @@ class TimeTriggerConfigDialog : DialogFragment() {
                     else                    -> "daily"
                 }
 
-                val daysOfWeek = getSelectedDaysOfWeek()
+                val daysOfWeek = getSelectedDaysOfWeek(weeklyContainer)
                 val dayOfMonth = dayOfMonthPicker.value
 
                 val configData = mutableMapOf<String, Any>(
                     "hour" to hour,
                     "minute" to minute,
                     "frequency" to frequency
-                )
-
-                if (frequency == "weekly") {
-                    // Serializamos como ArrayList para que sea Serializable
-                    configData["daysOfWeek"] = ArrayList(daysOfWeek)
-                } else if (frequency == "monthly") {
-                    configData["dayOfMonth"] = dayOfMonth
+                ).apply {
+                    if (frequency == "weekly") put("daysOfWeek", ArrayList(daysOfWeek))
+                    if (frequency == "monthly") put("dayOfMonth", dayOfMonth)
                 }
 
-                Timber.d("ConfigData para el trigger: $configData")
-
                 val trigger = Trigger(
-                    routineId   = 0,
-                    uuid        = UUID.randomUUID().toString(),
+                    routineId = 0,
+                    uuid = UUID.randomUUID().toString(),
                     triggerType = "TIME",
-                    data        = configData
+                    data = configData
                 )
 
-                listener?.onTimeTriggerConfigured(trigger)
+                Timber.d("Enviando trigger configurado: ${trigger.uuid}")
+                listener?.onTimeTriggerConfigured(trigger) ?: Timber.e("Listener es null!")
             }
             .setNegativeButton("Cancelar", null)
             .create()
     }
 
-    private fun showWeeklyPreferenceFragment() {
-        childFragmentManager.commit {
-            replace(R.id.weeklyContainer, WeeklyPreferenceFragment())
+    private fun showWeeklyCheckboxes(weeklyContainer: FrameLayout) {
+        val daysOfWeek = listOf("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
+        val checkboxContainer = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
         }
-    }
 
-    private fun getSelectedDaysOfWeek(): List<Int> {
-        val frag = childFragmentManager.findFragmentById(R.id.weeklyContainer)
-                as? WeeklyPreferenceFragment
-        return frag?.getSelectedDays() ?: emptyList()
-    }
-
-    class WeeklyPreferenceFragment : PreferenceFragmentCompat() {
-        private val selectedDays = mutableSetOf<String>()
-
-        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-            setPreferencesFromResource(R.xml.weekly_preferences, rootKey)
-            findPreference<MultiSelectListPreference>("days_of_week")?.setOnPreferenceChangeListener { _, newValue ->
-                selectedDays.clear()
-                selectedDays.addAll(newValue as? Set<String> ?: emptySet())
-                true
+        daysOfWeek.forEachIndexed { index, day ->
+            val checkBox = CheckBox(context).apply {
+                text = day
+                tag = index + 1 // Use 1-based index to represent day of week
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
             }
+            checkboxContainer.addView(checkBox)
         }
 
-        fun getSelectedDays(): List<Int> =
-            selectedDays.mapNotNull { it.toIntOrNull() }
+        weeklyContainer.addView(checkboxContainer)
+    }
+
+    private fun getSelectedDaysOfWeek(weeklyContainer: FrameLayout): List<Int> {
+        val checkboxContainer = weeklyContainer.getChildAt(0) as? LinearLayout
+        return checkboxContainer?.children?.mapNotNull {
+            val checkbox = it as? CheckBox
+            if (checkbox?.isChecked == true) checkbox.tag as? Int else null
+        }?.toList() ?: emptyList()
+    }
+
+    companion object {
+        init { Timber.d("TimeTriggerConfigDialog loaded") }
+        fun createInstance(): TimeTriggerConfigDialog {
+            return TimeTriggerConfigDialog()
+        }
     }
 }
