@@ -6,11 +6,14 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.rutinas.data.model.Trigger
 import com.example.rutinas.databinding.ItemTriggerBinding
 import timber.log.Timber
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
+
 
 class TriggerAdapter(
-    private val triggers: List<Trigger>,
+
     private val onTriggerDeleted: (Trigger) -> Unit
-) : RecyclerView.Adapter<TriggerAdapter.TriggerViewHolder>() {
+) : ListAdapter<Trigger, TriggerAdapter.TriggerViewHolder>(TriggerDiffCallback()) {
 
     inner class TriggerViewHolder(
         private val binding: ItemTriggerBinding
@@ -67,6 +70,7 @@ class TriggerAdapter(
                     }
                 }
 
+
                 // Configurar botón de eliminar
                 btnDelete.setOnClickListener {
                     onTriggerDeleted(trigger)
@@ -100,8 +104,14 @@ class TriggerAdapter(
     }
 
     override fun onBindViewHolder(holder: TriggerViewHolder, position: Int) {
-        holder.bind(triggers[position])
+        holder.bind(getItem(position))
     }
 
-    override fun getItemCount(): Int = triggers.size
+    class TriggerDiffCallback : DiffUtil.ItemCallback<Trigger>() {
+        override fun areItemsTheSame(oldItem: Trigger, newItem: Trigger): Boolean = oldItem.id == newItem.id
+        override fun areContentsTheSame(oldItem: Trigger, newItem: Trigger): Boolean = oldItem == newItem
+    }
+
+
 }
+

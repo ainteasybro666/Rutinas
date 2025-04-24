@@ -1,6 +1,5 @@
 package com.example.rutinas.ui.edit.dialogs
 
-import android.app.Dialog
 import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -8,6 +7,7 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
+import android.app.Dialog
 import androidx.core.view.children
 import com.example.rutinas.R
 import com.example.rutinas.data.model.Trigger
@@ -28,6 +28,16 @@ class TimeTriggerConfigDialog : DialogFragment() {
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        val daysOfWeek = listOf("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
+        val checkboxContainer = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+            id = View.generateViewId()
+        }
+
         val view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_time_trigger_config, null)
 
         val timePicker = view.findViewById<TimePicker>(R.id.timePicker).apply {
@@ -50,6 +60,19 @@ class TimeTriggerConfigDialog : DialogFragment() {
                 R.id.weeklyRadioButton -> {
                     weeklyContainer.visibility = View.VISIBLE
                     dayOfMonthPicker.visibility = View.GONE
+                    // Check if checkboxes already exist in the container
+                    if (weeklyContainer.findViewById<LinearLayout>(checkboxContainer.id) == null) {
+                        daysOfWeek.forEachIndexed { index, day ->
+                            val checkBox = CheckBox(context).apply {
+                                text = day
+                                tag = index + 1 // Use 1-based index to represent day of week
+                                layoutParams = LinearLayout.LayoutParams(
+                                    LinearLayout.LayoutParams.MATCH_PARENT,
+                                    LinearLayout.LayoutParams.WRAP_CONTENT)
+                            }
+                            checkboxContainer.addView(checkBox)
+                        }
+                        weeklyContainer.addView(checkboxContainer)}
                 }
                 R.id.monthlyRadioButton -> {
                     weeklyContainer.visibility = View.GONE

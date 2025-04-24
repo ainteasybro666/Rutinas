@@ -97,11 +97,9 @@ class RoutineEditFragment : BaseFragment(),
             toolbar.title = "Editar Rutina"
 
             btnAddTrigger.setOnClickListener {
-                if (canShowDialog()) { // Nueva función de validación
-                    TriggerTypeDialog.createInstance().apply {
-                        setTriggerTypeListener(this@RoutineEditFragment)
-                        showSafe(childFragmentManager) // Método seguro para mostrar
-                    }
+                TriggerTypeDialog.createInstance().apply {
+                    setTriggerTypeListener(this@RoutineEditFragment)
+                    showDialog(this)
                 }
             }
 
@@ -126,17 +124,15 @@ class RoutineEditFragment : BaseFragment(),
 
         AddActionDialogFragment.newInstance().apply {
             setOnActionSelectedListener { navigateToEditAction(it) }
-            showSafe(childFragmentManager) // Método seguro
+            showDialog(this)
         }
     }
 
     private fun setupTriggersRecyclerView() {
         triggerAdapter = TriggerAdapter(
-            triggers = triggersList,
             onTriggerDeleted = { trigger ->
                 triggersList.remove(trigger)
-                triggerAdapter.notifyDataSetChanged()
-                updateEmptyStateVisibility()
+                triggerAdapter.submitList(triggersList.toList())
             }
         )
 
@@ -145,7 +141,6 @@ class RoutineEditFragment : BaseFragment(),
             adapter = triggerAdapter
             addItemDecoration(createItemDecoration())
         }
-        updateEmptyStateVisibility()
     }
 
     private fun setupActionsRecyclerView() {
@@ -161,7 +156,6 @@ class RoutineEditFragment : BaseFragment(),
             layoutManager = LinearLayoutManager(requireContext())
             adapter = actionAdapter
         }
-        updateEmptyStateVisibility()
     }
     private fun navigateToEditAction(action: Action) {
         val editFragment = when (action.type) {
@@ -183,7 +177,7 @@ class RoutineEditFragment : BaseFragment(),
     }
 
     override fun onTriggerSelected(triggerType: TriggerTypeDialog.TriggerType) {
-        if (!isAdded || isDetached) {  // Verificación crítica añadida
+        if (!isAdded || isDetached) {
             Timber.e("onTriggerSelected: Fragment no adjunto")
             return
         }
@@ -195,7 +189,7 @@ class RoutineEditFragment : BaseFragment(),
         when (triggerType) {
             TriggerTypeDialog.TriggerType.TIME -> {
                 timeDialog.setTimeTriggerConfigListener(this@RoutineEditFragment)
-                if (isAdded) timeDialog.show(childFragmentManager, "TimeTriggerConfigDialog")
+                showDialog(timeDialog)
             }
             TriggerTypeDialog.TriggerType.CALENDAR -> {
                 calendarDialog.setCalendarTriggerListener(this@RoutineEditFragment)
@@ -216,22 +210,19 @@ class RoutineEditFragment : BaseFragment(),
     override fun onCalendarTriggerConfigured(trigger: Trigger) {
         Timber.d("Trigger de calendario configurado: $trigger")
         triggersList.add(trigger)
-        triggerAdapter.notifyDataSetChanged()
-        updateEmptyStateVisibility()
+        triggerAdapter.submitList(triggersList.toList())
     }
 
     override fun onLocationTriggerConfigured(trigger: Trigger) {
         Timber.d("Trigger de ubicación configurado: $trigger")
         triggersList.add(trigger)
-        triggerAdapter.notifyDataSetChanged()
-        updateEmptyStateVisibility()
+        triggerAdapter.submitList(triggersList.toList())
     }
 
     override fun onTimeTriggerConfigured(trigger: Trigger) {
         Timber.d("Trigger de tiempo configurado: $trigger")
         triggersList.add(trigger)
-        triggerAdapter.notifyDataSetChanged()
-        updateEmptyStateVisibility()
+        triggerAdapter.submitList(triggersList.toList())
     }
 
     private fun setupObservers() {
@@ -245,7 +236,7 @@ class RoutineEditFragment : BaseFragment(),
                         triggersList.addAll(it.triggers)
                         triggerAdapter.notifyDataSetChanged()
                         viewModel.updateActions(it.actions)
-                        updateEmptyStateVisibility()
+                        triggerAdapter.submitList(triggersList.toList())
                     }
                 }
             }
@@ -256,7 +247,7 @@ class RoutineEditFragment : BaseFragment(),
                 viewModel.actions.collect { actions ->
                     Timber.d("Lista de acciones actualizada: $actions")
                     actionAdapter.submitList(actions)
-                    updateEmptyStateVisibility()
+                    actionAdapter.submitList(actions.toList())
                 }
             }
         }
@@ -310,21 +301,6 @@ class RoutineEditFragment : BaseFragment(),
         return isValid
     }
 
-    private fun updateEmptyStateVisibility() {
-        if (!isAdded) return
-        vb.apply {
-            val hasTriggers = triggersList.isNotEmpty()
-            val hasActions = !viewModel.actions.value.isNullOrEmpty()
-
-            rvTriggers.visibility = if (hasTriggers) View.VISIBLE else View.GONE
-            emptyStateTriggersGroup.visibility = if (hasTriggers) View.GONE else View.VISIBLE
-
-            rvActions.visibility = if (hasActions) View.VISIBLE else View.GONE
-            emptyStateActionsGroup.visibility = if (hasActions) View.GONE else View.VISIBLE
-
-            btnSaveRoutine.isEnabled = hasTriggers && hasActions
-        }
-    }
 
     private fun createItemDecoration() = object : RecyclerView.ItemDecoration() {
         override fun getItemOffsets(
@@ -355,11 +331,11 @@ class RoutineEditFragment : BaseFragment(),
     private fun showFloatingButton() {
         activity?.findViewById<View>(R.id.fab_add_routine)?.visibility = View.VISIBLE
     }
-    private fun DialogFragment.showSafe(fm: FragmentManager) {
-        if (!canShowDialog() || fm.isDestroyed) {
-            Timber.e("No se puede mostrar diálogo: FragmentManager no válido")
-            return
+    private fun showDialog(dialog: DialogFragment) {
+        if (canShowDialog()) {
+            dialog.show(parentFragmentManager, dialog::class.java.simpleName)
+        } else {
+            Timber.e("No se puede mostrar diálogo: Estado inválido del fragmento")
         }
-        show(fm, this::class.java.simpleName)
     }
 }

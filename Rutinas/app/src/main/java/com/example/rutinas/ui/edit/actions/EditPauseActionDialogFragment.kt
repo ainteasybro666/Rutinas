@@ -1,9 +1,9 @@
 package com.example.rutinas.ui.edit.actions
 
 import android.app.Dialog
-import android.app.AlertDialog
 import android.os.Bundle
 import android.view.View
+import androidx.appcompat.app.AlertDialog
 import com.example.rutinas.data.model.Action
 import com.example.rutinas.databinding.FragmentEditPauseActionBinding
 import timber.log.Timber
@@ -19,13 +19,21 @@ class EditPauseActionDialogFragment : BaseEditActionDialogFragment(), ActionEdit
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         _binding = FragmentEditPauseActionBinding.inflate(layoutInflater)
 
-        val dialog = super.onCreateDialog(savedInstanceState) as AlertDialog
-        dialog.setView(binding.root)
+        val builder = AlertDialog.Builder(requireContext())
+        builder.setView(binding.root)
+
+        builder.setPositiveButton("Guardar") { _, _ ->
+            Timber.d("EditPauseActionDialogFragment: Botón Guardar pulsado")
+            saveAction()
+        }
+        builder.setNegativeButton("Cancelar") { _, _ ->
+            Timber.d("EditPauseActionDialogFragment: Botón Cancelar pulsado")
+        }
 
         setupUI()
         loadActionData()
 
-        return dialog
+        return builder.create()
     }
 
 
@@ -40,14 +48,15 @@ class EditPauseActionDialogFragment : BaseEditActionDialogFragment(), ActionEdit
         Timber.d("EditPauseActionDialogFragment: setupUI() llamado")
         with(binding) {
             // Configurar el botón "Guardar"
-            (dialog as AlertDialog).getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                saveAction()
-            }
+            // ya no es necesario. Se ha movido la lógica a onCreateDialog
+            //(dialog as AlertDialog).getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            //    saveAction()
+            //}
 
-            (dialog as AlertDialog).getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
-                Timber.d("EditPauseActionDialogFragment: Botón Volver pulsado")
-                dismiss()
-            }
+            //(dialog as AlertDialog).getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
+            //    Timber.d("EditPauseActionDialogFragment: Botón Volver pulsado")
+            //    dismiss()
+            //}
         }
     }
 

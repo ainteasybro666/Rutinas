@@ -48,9 +48,7 @@ class EditVolumeActionDialogFragment : DialogFragment(), Parcelable, ActionEdito
             builder.setNegativeButton("Cancelar") { _, _ ->
                 Timber.d("EditVolumeActionDialogFragment: Botón Cancelar pulsado")
             }
-            dialog.setView(builder.create().requireViewById(android.R.id.content))
-
-            return dialog
+            return builder.create()
 
 
         } catch (e: Exception) {

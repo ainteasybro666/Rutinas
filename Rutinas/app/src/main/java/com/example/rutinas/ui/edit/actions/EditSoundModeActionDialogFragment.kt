@@ -31,7 +31,6 @@ class EditSoundModeActionDialogFragment : DialogFragment(), Parcelable, ActionEd
 
         loadActionData()
 
-        val dialog =  super.onCreateDialog(savedInstanceState) as AlertDialog
         return AlertDialog.Builder(requireContext())
             .setTitle("Modo de Sonido")
             .setView(binding.root)
