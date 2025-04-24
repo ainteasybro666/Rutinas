@@ -158,16 +158,22 @@ class RoutineEditFragment : BaseFragment(),
         }
     }
     private fun navigateToEditAction(action: Action) {
-        val editFragment = when (action.type) {
-            ActionType.ALARM -> EditAlarmActionDialogFragment.newInstance(action)
-            ActionType.ANNOUNCEMENT -> EditAnnouncementActionDialogFragment.newInstance(action)
+        val editFragment: DialogFragment = when (action.type) {
+            ActionType.ALARM -> {
+                EditAlarmActionDialogFragment.newInstance(action)
+            }
+            ActionType.ANNOUNCEMENT -> {
+                EditAnnouncementActionDialogFragment.newInstance(action)
+            }
             ActionType.BRIGHTNESS -> EditBrightnessActionDialogFragment.newInstance(action)
             ActionType.VOLUME -> EditVolumeActionDialogFragment.newInstance(action)
             ActionType.SOUND_MODE -> EditSoundModeActionDialogFragment.newInstance(action)
             ActionType.TIME -> EditTimeActionDialogFragment.newInstance(action)
             ActionType.READ_NOTIFICATIONS -> EditReadNotificationsActionDialogFragment.newInstance(action)
             ActionType.PAUSE -> EditPauseActionDialogFragment.newInstance(action)
-            else -> throw IllegalArgumentException("Tipo no soportado: ${'$'}{action.type}")
+            else -> {
+                throw IllegalArgumentException("Tipo no soportado: ${'$'}{action.type}")
+            }
         }
 
         (editFragment as? BaseEditActionDialogFragment)?.setOnActionUpdatedListener { updatedAction ->
