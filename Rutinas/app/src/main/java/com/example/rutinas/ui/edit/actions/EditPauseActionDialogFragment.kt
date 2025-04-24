@@ -6,6 +6,7 @@ import android.view.View
 import androidx.appcompat.app.AlertDialog
 import com.example.rutinas.data.model.Action
 import com.example.rutinas.databinding.FragmentEditPauseActionBinding
+import com.google.android.material.snackbar.Snackbar
 import timber.log.Timber
 
 class EditPauseActionDialogFragment : BaseEditActionDialogFragment(), ActionEditorDialog {
@@ -33,7 +34,17 @@ class EditPauseActionDialogFragment : BaseEditActionDialogFragment(), ActionEdit
         setupUI()
         loadActionData()
 
-        return builder.create()
+        return try{
+            builder.create()
+        } catch (e: Exception){
+            Timber.e("Error creating dialog - ${e.message}")
+            dismiss()
+            // Mostrar SnackBar
+            Snackbar.make(binding.root, "Error al cargar la acción", Snackbar.LENGTH_LONG).show()
+            AlertDialog.Builder(requireContext()).setTitle("Error").setMessage("Failed to load action")
+                .setPositiveButton("OK", null)
+                .create()
+        }
     }
 
 
@@ -72,13 +83,28 @@ class EditPauseActionDialogFragment : BaseEditActionDialogFragment(), ActionEdit
             }
         } catch (e: Exception) {
             Timber.e("EditPauseActionDialogFragment: Error al cargar datos - ${e.message}")
+            // Mostrar SnackBar
+            Snackbar.make(binding.root, "Error al cargar la acción", Snackbar.LENGTH_LONG).show()
         }
     }
 
     private fun saveAction() {
         Timber.d("EditPauseActionDialogFragment: saveAction() llamado")
         try {
-            val duration = binding.durationEditText.text.toString().toLong() * 1000
+            val durationString = binding.durationEditText.text.toString()
+            if (durationString.isEmpty()) {
+                // Mostrar SnackBar
+                Snackbar.make(binding.root, "La duración no puede estar vacía", Snackbar.LENGTH_LONG).show()
+                return
+            }
+
+            val duration = try {
+                durationString.toLong() * 1000
+            } catch (e: NumberFormatException) {
+                // Mostrar SnackBar
+                Snackbar.make(binding.root, "Duración inválida", Snackbar.LENGTH_LONG).show()
+                return
+            }
 
             Timber.d("EditPauseActionDialogFragment: Guardando - duración: $duration")
 
@@ -89,8 +115,11 @@ class EditPauseActionDialogFragment : BaseEditActionDialogFragment(), ActionEdit
             )
             actionUpdateListener?.invoke(updatedAction)
             Timber.d("EditPauseActionDialogFragment: Acción actualizada y notificada")
+            dismiss()
         } catch (e: Exception) {
             Timber.e("EditPauseActionDialogFragment: Error al guardar acción - ${e.message}")
+            // Mostrar SnackBar
+            Snackbar.make(binding.root, "Error al guardar la acción", Snackbar.LENGTH_LONG).show()
         }
     }
 

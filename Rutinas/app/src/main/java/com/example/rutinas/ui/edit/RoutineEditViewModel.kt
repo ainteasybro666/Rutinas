@@ -62,6 +62,9 @@ class RoutineEditViewModel @Inject constructor(
     //  No es necesario llamar a repository.updateActions aquí, ya que las acciones se guardan/actualizan individualmente.
     fun updateActions(newActions: List<Action>) {
         Timber.d("Actualizando lista de acciones (sin guardar en repositorio): $newActions")
+        viewModelScope.launch {
+            repository.updateActions(newActions)
+        }
         _actions.value = newActions
     }
 
@@ -111,6 +114,7 @@ class RoutineEditViewModel @Inject constructor(
                 val result = repository.saveRoutine(routine)
                 if (result is Resource.Success) {
                     _currentRoutine.value = routine.copy(id = result.data)
+                    _actions.value = actions
                     Timber.d("Rutina guardada con éxito, ID: ${result.data}")
                 } else if (result is Resource.Error) {
                     Timber.e("Error al guardar rutina: ${result.message}")

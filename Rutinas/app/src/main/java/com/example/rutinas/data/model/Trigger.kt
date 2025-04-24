@@ -1,14 +1,13 @@
 package com.example.rutinas.data.model
 
+import android.os.Parcel
 import android.os.Parcelable
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import com.example.rutinas.data.model.RoutineEntity
-import com.example.rutinas.data.local.Converters
-import kotlinx.parcelize.Parcelize
+import kotlinx.parcelize.Parceler
 import kotlinx.parcelize.RawValue
 import java.time.LocalDateTime
 import java.util.UUID
@@ -23,7 +22,6 @@ import java.util.UUID
     )],
     indices = [Index(value = ["routineId"], name = "idx_trigger_routine_id")]
 )
-@Parcelize
 data class Trigger(
     val uuid: String = UUID.randomUUID().toString(),
     val routineId: Long,
@@ -35,4 +33,28 @@ data class Trigger(
     val wifiSsid: String? = null,
     @ColumnInfo(name = "trigger_data")
     val data: @RawValue Map<String, Any> // @RawValue en la propiedad
-) : Parcelable
+) : Parcelable {
+
+    constructor(parcel: Parcel) : this(
+        parcel.readString() ?: "",
+        parcel.readLong(),
+        parcel.readString() ?: "",
+        parcel.readLong(),
+        parcel.readSerializable() as? LocalDateTime,
+        parcel.readSerializable() as? LocalDateTime,
+        parcel.readString(),
+        parcel.readHashMap(HashMap::class.java.classLoader) as Map<String, Any>
+    )
+
+    override fun writeToParcel(parcel: Parcel, flags: Int) {
+        parcel.writeString(uuid)
+        parcel.writeLong(routineId)
+        parcel.writeString(triggerType)
+        parcel.writeLong(id)
+        parcel.writeSerializable(startDate)
+        parcel.writeSerializable(endDate)
+        parcel.writeString(wifiSsid)
+        parcel.writeMap(data)
+    }
+    override fun describeContents(): Int = 0
+}
