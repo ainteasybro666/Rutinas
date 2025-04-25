@@ -1,20 +1,19 @@
 package com.example.rutinas.ui.edit.actions
 
 import android.app.Dialog
+import android.app.AlertDialog
 import android.os.Bundle
-import android.os.Parcelable
 import android.view.View
 import android.widget.SeekBar
 import android.widget.TextView
-import androidx.fragment.app.DialogFragment
-import androidx.appcompat.app.AlertDialog
 import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.DataWrapper
 import com.example.rutinas.databinding.FragmentEditVolumeActionBinding
-import kotlinx.parcelize.Parcelize
+import com.example.rutinas.ui.edit.RoutineEditFragment
 import timber.log.Timber
 
-@Parcelize
-class EditVolumeActionDialogFragment : DialogFragment(), Parcelable, ActionEditorDialog {
+
+class EditVolumeActionDialogFragment(listener: RoutineEditFragment.ActionDialogListener) : BaseEditActionDialogFragment(listener), ActionEditorDialog {
     private var _binding: FragmentEditVolumeActionBinding? = null
     private val binding get() = _binding!!
     private lateinit var action: Action
@@ -26,12 +25,12 @@ class EditVolumeActionDialogFragment : DialogFragment(), Parcelable, ActionEdito
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         Timber.d("EditVolumeActionDialogFragment: onCreateDialog() llamado")
+        super.onCreateDialog(savedInstanceState)
         _binding = FragmentEditVolumeActionBinding.inflate(layoutInflater)
 
         try {
-            action = requireArguments().getParcelable<Action>(ARG_ACTION)
-                ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
-
+            
+            
             Timber.d("EditVolumeActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
 
             setupUI()
@@ -102,7 +101,9 @@ class EditVolumeActionDialogFragment : DialogFragment(), Parcelable, ActionEdito
     private fun loadActionData() {
         Timber.d("EditVolumeActionDialogFragment: loadActionData() llamado")
         try {
-            action.data.let { data ->
+            action.data?.let { dataWrapper ->
+                val data = dataWrapper.data
+                
                 with(binding) {
                     data["mediaVolume"]?.let { volume ->
                         val mediaVolume = (volume as? Number)?.toInt() ?: 50
@@ -148,8 +149,13 @@ class EditVolumeActionDialogFragment : DialogFragment(), Parcelable, ActionEdito
                 }
             }
 
-            val updatedAction = action.copy(data = volumeData)
-            onActionUpdatedListener?.invoke(updatedAction)
+            val updatedAction = action.copy(
+                data = DataWrapper(volumeData)
+            )
+            
+            actionUpdateListener?.invoke(updatedAction)
+            listener.onActionUpdated(updatedAction)
+
             Timber.d("EditVolumeActionDialogFragment: Acción actualizada y notificada")
         } catch (e: Exception) {
             Timber.e("EditVolumeActionDialogFragment: Error al guardar acción - ${e.message}")
@@ -165,7 +171,11 @@ class EditVolumeActionDialogFragment : DialogFragment(), Parcelable, ActionEdito
     companion object {
         private const val ARG_ACTION = "arg_action"
 
-        fun newInstance(action: Action) = EditVolumeActionDialogFragment().apply {
+        fun newInstance(
+            action: Action,
+            listener: RoutineEditFragment.ActionDialogListener
+        ): EditVolumeActionDialogFragment {
+            return EditVolumeActionDialogFragment(listener).apply {
             arguments = Bundle().apply {
                 putParcelable(ARG_ACTION, action)
             }

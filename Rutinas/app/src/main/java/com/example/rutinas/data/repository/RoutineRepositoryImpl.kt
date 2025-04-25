@@ -85,9 +85,13 @@ class RoutineRepositoryImpl @Inject constructor(
         }.forEach { triggerDao.delete(it) }
 
         // Insertar/Actualizar triggers
+        val triggersToSave = mutableListOf<Trigger>()
         triggers.forEach { trigger ->
-            val triggerToSave = trigger.copy(routineId = routineId)
-            if (trigger.id == 0L) {
+            triggersToSave.add(trigger.copy(routineId = routineId))
+        }
+        // Guardar los triggers
+        triggersToSave.forEach { triggerToSave ->
+            if (triggerToSave.id == 0L) {
                 triggerDao.insert(triggerToSave.copy(uuid = UUID.randomUUID().toString()))
             } else {
                 triggerDao.update(triggerToSave)

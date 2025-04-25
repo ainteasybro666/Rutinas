@@ -1,40 +1,33 @@
 package com.example.rutinas.ui.edit.actions
 
 import android.app.Dialog
-import android.content.DialogInterface
 import android.os.Bundle
-import android.view.View
-import android.widget.SeekBar.OnSeekBarChangeListener
-import androidx.appcompat.app.AlertDialog
-import android.os.Parcelable
 import android.widget.SeekBar
-import androidx.fragment.app.DialogFragment
+import androidx.appcompat.app.AlertDialog
 import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.DataWrapper
 import com.example.rutinas.databinding.FragmentEditBrightnessActionBinding
-import kotlinx.parcelize.Parcelize
+import com.example.rutinas.ui.edit.RoutineEditFragment
 import timber.log.Timber
 
-@Parcelize
-class EditBrightnessActionDialogFragment
-    : BaseEditActionDialogFragment(),
-    ActionEditorDialog,
-    Parcelable {
+class EditBrightnessActionDialogFragment(private val listener: RoutineEditFragment.ActionDialogListener) :
+    BaseEditActionDialogFragment(listener),
+    ActionEditorDialog {
     private var _binding: FragmentEditBrightnessActionBinding? = null
     private val binding get() = _binding!!
+    private lateinit var action: Action
 
-    override fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
-        actionUpdateListener = listener
-    }
+
+
+
+
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         super.onCreateDialog(savedInstanceState)
         Timber.d("EditBrightnessActionDialogFragment: onCreateDialog() llamado")
         _binding = FragmentEditBrightnessActionBinding.inflate(layoutInflater)
 
-        action = requireArguments().getParcelable<Action>(ARG_ACTION)
-            ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
-
-        Timber.d("EditBrightnessActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
+        Timber.d("EditBrightnessActionDialogFragment: Acción recibida - tipo: ${action.actionType}, datos: ${action.data}")
 
         setupUI()
         loadActionData()
@@ -64,10 +57,12 @@ class EditBrightnessActionDialogFragment
                     Timber.d("EditBrightnessActionDialogFragment: Brillo cambiado a $progress%")
                     tvBrightnessValue.text = "Brillo: $progress%"
                 }
-                override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-                override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
-                }
-            )
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+
+
         }
     }
 
@@ -95,12 +90,12 @@ class EditBrightnessActionDialogFragment
             Timber.d("EditBrightnessActionDialogFragment: Guardando - brillo: $brightness%")
 
             val updatedAction = action.copy(
-                data = mapOf(
-                    "brightness" to brightness
-                )
+                data = DataWrapper(mapOf(
+                    "brightness" to brightness))
             )
 
-            actionUpdateListener?.invoke(updatedAction)
+            listener.onActionUpdated(updatedAction)
+
             Timber.d("EditBrightnessActionDialogFragment: Acción actualizada y notificada")
         } catch (e: Exception) {
             Timber.e("EditBrightnessActionDialogFragment: Error al guardar acción - ${e.message}")
@@ -116,8 +111,8 @@ class EditBrightnessActionDialogFragment
     companion object {
         private const val ARG_ACTION = "arg_action"
 
-        fun newInstance(action: Action): EditBrightnessActionDialogFragment {
-            return EditBrightnessActionDialogFragment().apply {
+        fun newInstance(action: Action, listener: RoutineEditFragment.ActionDialogListener): EditBrightnessActionDialogFragment {
+            return EditBrightnessActionDialogFragment(listener).apply {
                 arguments = Bundle().apply {
                     putParcelable(ARG_ACTION, action)
                 }

@@ -1,18 +1,20 @@
-// Action.kt
 package com.example.rutinas.data.model
+
+import android.os.Parcel
+import android.os.Parcelable
+import java.util.UUID
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import android.os.Parcelable
-import kotlinx.parcelize.Parcelize
-import kotlinx.parcelize.RawValue
-import java.util.UUID
 
 @Entity(
+
     tableName = "actions",
+
+
     foreignKeys = [
         ForeignKey(
             entity = RoutineEntity::class,
@@ -22,19 +24,52 @@ import java.util.UUID
         )
     ],
     indices = [Index(value = ["routineId"], name = "idx_action_routine_id")]
+
 )
-@Parcelize
+
 data class Action(
+
     @PrimaryKey(autoGenerate = true)
+
     val id: Long = 0,
+
     var uuid: String = UUID.randomUUID().toString(),
-    val type: ActionType,
+
+    val actionType: String,
+
     val routineId: Long,
+
     @ColumnInfo(name = "data")
-    val data: @RawValue Map<String, Any> = emptyMap(),
+
+    val data: DataWrapper? = null,
+
     val executionOrder: Int,
+
     val pauseDuration: Long? = null
 ) : Parcelable {
+
+    override fun writeToParcel(parcel: Parcel, flags: Int) {
+        parcel.writeLong(id)
+        parcel.writeString(uuid)
+        parcel.writeString(actionType)
+        parcel.writeLong(routineId)
+        parcel.writeParcelable(data, flags)
+        parcel.writeInt(executionOrder)
+        parcel.writeLong(pauseDuration)
+    }
+
+    override fun describeContents(): Int {
+        return 0
+    }
+
+    companion object CREATOR : Parcelable.Creator<Action> {
+        override fun createFromParcel(parcel: Parcel): Action {
+            return Action(
+                parcel.readLong(), parcel.readString() ?: UUID.randomUUID().toString(), parcel.readString() ?: "", parcel.readLong(), parcel.readParcelable(DataWrapper::class.java.classLoader), parcel.readInt(), parcel.readLong()
+            )
+        }
+        override fun newArray(size: Int): Array<Action?> { return arrayOfNulls(size) }
+    }
 
     fun getString(key: String): String? = data[key] as? String
     fun getInt(key: String): Int? = (data[key] as? Number)?.toInt()
@@ -42,7 +77,7 @@ data class Action(
 
     // Propiedades calculadas para la UI
     val title: String
-        get() = when (ActionType.fromString(type)) {
+        get() = when (ActionType.fromString(actionType)) {
             ActionType.ANNOUNCEMENT -> "Anuncio"
             ActionType.ALARM -> "Alarma"
             ActionType.READ_NOTIFICATIONS -> "Leer Notificaciones"
@@ -55,7 +90,7 @@ data class Action(
         }
 
     val description: String
-        get() = when (ActionType.fromString(type)) {
+        get() = when (ActionType.fromString(actionType)) {
             ActionType.ANNOUNCEMENT -> data["message"] as? String ?: "Sin mensaje"
             ActionType.ALARM -> "Alarma: ${data["time"] ?: "No configurada"}"
             ActionType.READ_NOTIFICATIONS -> "Leer notificaciones activas"
@@ -78,15 +113,18 @@ data class Action(
         }
 
     companion object {
+
         fun createAction(
+
             routineId: Long,
+
             actionType: ActionType,
-            data: Map<String, Any>,
+            data: DataWrapper?,
             executionOrder: Int
-        ): Action {        
-            return Action (
+        ): Action {
+            return Action(
                 routineId = routineId,
-                type = actionType,
+                actionType = actionType.toString(),
                 data = data,
                 executionOrder = executionOrder
             ).apply {

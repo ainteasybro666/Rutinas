@@ -2,36 +2,28 @@ package com.example.rutinas.ui.edit.actions
 
 import android.app.Dialog
 import android.os.Bundle
-import android.text.Editable
-import android.os.Parcelable
 import android.view.View
 import androidx.appcompat.app.AlertDialog
-import androidx.fragment.app.DialogFragment
 import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.DataWrapper
 import com.example.rutinas.databinding.FragmentEditAnnouncementActionBinding
-import kotlinx.parcelize.Parcelize
+import com.example.rutinas.ui.edit.RoutineEditFragment
 import timber.log.Timber
 
-@Parcelize
- class EditAnnouncementActionDialogFragment
-     : BaseEditActionDialogFragment(),
-       ActionEditorDialog,
-       Parcelable {
+class EditAnnouncementActionDialogFragment(listener: RoutineEditFragment.ActionDialogListener)
+     : BaseEditActionDialogFragment(listener),
+       ActionEditorDialog {
 
-    override fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
-        actionUpdateListener = listener
-    }
 
     private var _binding: FragmentEditAnnouncementActionBinding? = null
     private val binding get() = _binding!!
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        super.onCreateDialog(savedInstanceState)
         Timber.d("EditAnnouncementActionDialogFragment: onCreateDialog() llamado")
         _binding = FragmentEditAnnouncementActionBinding.inflate(layoutInflater)
         setupUI()
 
-        action = requireArguments().getParcelable<Action>(ARG_ACTION)
-            ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
 
         Timber.d("EditAnnouncementActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
 
@@ -58,12 +50,14 @@ import timber.log.Timber
     private fun loadActionData() {
         Timber.d("EditAnnouncementActionDialogFragment: loadActionData() llamado")
         try {
-            action.data.let { data ->
-                val message = data["message"] as? String ?: ""
-                val volume = (data["volume"] as? Int) ?: 50
+            action.data?.let { dataWrapper ->
+                val data = dataWrapper.data
+                 val message = data["message"] as? String ?: ""
+                 val volume = (data["volume"] as? Int) ?: 50
 
                 Timber.d("EditAnnouncementActionDialogFragment: Datos cargados - mensaje: $message, volumen: $volume")
 
+                // Cargar los datos en los elementos de la UI
                 binding.etMessage.setText(message)
                 binding.sliderVolume.progress = volume
             }
@@ -81,12 +75,14 @@ import timber.log.Timber
             Timber.d("EditAnnouncementActionDialogFragment: Guardando - mensaje: $message, volumen: $volume")
 
             val updatedAction = action.copy(
-                data = mapOf(
+                data = DataWrapper(mapOf(
                     "message" to message,
                     "volume" to volume
-                )
+                ))
             )
 
+            // Notificar a los listeners que la acción ha sido actualizada
+            listener.onActionUpdated(updatedAction)
             actionUpdateListener?.invoke(updatedAction)
             Timber.d("EditAnnouncementActionDialogFragment: Acción actualizada y notificada")
         } catch (e: Exception) {
@@ -103,8 +99,8 @@ import timber.log.Timber
     companion object {
         private const val ARG_ACTION = "arg_action"
 
-        fun newInstance(action: Action): EditAnnouncementActionDialogFragment {
-            return EditAnnouncementActionDialogFragment().apply {
+        fun newInstance(action: Action, listener: RoutineEditFragment.ActionDialogListener): EditAnnouncementActionDialogFragment {
+            return EditAnnouncementActionDialogFragment(listener).apply {
                 arguments = Bundle().apply {
                     putParcelable(ARG_ACTION, action)
                 }

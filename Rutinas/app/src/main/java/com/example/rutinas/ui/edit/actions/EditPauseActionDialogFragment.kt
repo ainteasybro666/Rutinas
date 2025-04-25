@@ -1,33 +1,34 @@
 package com.example.rutinas.ui.edit.actions
 
 import android.app.Dialog
+import android.app.AlertDialog
 import android.os.Bundle
 import android.view.View
-import androidx.appcompat.app.AlertDialog
 import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.DataWrapper
 import com.example.rutinas.databinding.FragmentEditPauseActionBinding
+import com.example.rutinas.ui.edit.RoutineEditFragment
 import timber.log.Timber
 
-class EditPauseActionDialogFragment : BaseEditActionDialogFragment(), ActionEditorDialog {
+class EditPauseActionDialogFragment(listener: RoutineEditFragment.ActionDialogListener) : BaseEditActionDialogFragment(listener), ActionEditorDialog {
     private var _binding: FragmentEditPauseActionBinding? = null
     private val binding get() = _binding!!
+    private lateinit var action: Action
 
-    override fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
-        actionUpdateListener = listener
-    }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        super.onCreateDialog(savedInstanceState)
         _binding = FragmentEditPauseActionBinding.inflate(layoutInflater)
 
         val builder = AlertDialog.Builder(requireContext())
         builder.setView(binding.root)
 
         builder.setPositiveButton("Guardar") { _, _ ->
-            Timber.d("EditPauseActionDialogFragment: Botón Guardar pulsado")
             saveAction()
         }
         builder.setNegativeButton("Cancelar") { _, _ ->
             Timber.d("EditPauseActionDialogFragment: Botón Cancelar pulsado")
+            dismiss()
         }
 
         setupUI()
@@ -36,13 +37,6 @@ class EditPauseActionDialogFragment : BaseEditActionDialogFragment(), ActionEdit
         return builder.create()
     }
 
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        setupUI()
-        loadActionData()
-    }
 
     private fun setupUI() {
         Timber.d("EditPauseActionDialogFragment: setupUI() llamado")
@@ -63,7 +57,8 @@ class EditPauseActionDialogFragment : BaseEditActionDialogFragment(), ActionEdit
     private fun loadActionData() {
         Timber.d("EditPauseActionDialogFragment: loadActionData() llamado")
         try {
-            action.data.let { data ->
+            action.data?.let { dataWrapper ->
+                val data = dataWrapper.data
                 val duration = data["duration"] as? Long
 
                 Timber.d("EditPauseActionDialogFragment: Datos cargados - duración: $duration")
@@ -83,10 +78,12 @@ class EditPauseActionDialogFragment : BaseEditActionDialogFragment(), ActionEdit
             Timber.d("EditPauseActionDialogFragment: Guardando - duración: $duration")
 
             val updatedAction = action.copy(
-                data = mapOf(
+                data = DataWrapper(mapOf(
                     "duration" to duration
-                ),
+                ))
             )
+            listener.onActionUpdated(updatedAction)
+
             actionUpdateListener?.invoke(updatedAction)
             Timber.d("EditPauseActionDialogFragment: Acción actualizada y notificada")
         } catch (e: Exception) {
@@ -102,6 +99,12 @@ class EditPauseActionDialogFragment : BaseEditActionDialogFragment(), ActionEdit
 
     companion object {
         private const val ARG_ACTION = "arg_action"
-        fun newInstance(action: Action) = EditPauseActionDialogFragment().apply { arguments = Bundle().apply { putParcelable(ARG_ACTION, action) } }
+        fun newInstance(action: Action, listener: RoutineEditFragment.ActionDialogListener): EditPauseActionDialogFragment {
+            return EditPauseActionDialogFragment(listener).apply {
+                arguments = Bundle().apply {
+                    putParcelable(ARG_ACTION, action)
+                }
+            }
+        }
     }
 }
