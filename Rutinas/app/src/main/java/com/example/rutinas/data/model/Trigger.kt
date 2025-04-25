@@ -32,8 +32,8 @@ data class Trigger(
     val endDate: LocalDateTime? = null,
     val wifiSsid: String? = null,
     @ColumnInfo(name = "trigger_data")
-    val data: @RawValue Map<String, Any> // @RawValue en la propiedad
-) : Parcelable {
+    val data: DataWrapper // Usa DataWrapper en lugar de Map<String, Any>
+) : Parcelable{
 
     constructor(parcel: Parcel) : this(
         parcel.readString() ?: "",
@@ -43,7 +43,8 @@ data class Trigger(
         parcel.readSerializable() as? LocalDateTime,
         parcel.readSerializable() as? LocalDateTime,
         parcel.readString(),
-        parcel.readHashMap(HashMap::class.java.classLoader) as Map<String, Any>
+        // CORRECCIÓN: Leer DataWrapper usando readParcelable
+        parcel.readParcelable<DataWrapper>(DataWrapper::class.java.classLoader)!!
     )
 
     override fun writeToParcel(parcel: Parcel, flags: Int) {
@@ -54,7 +55,7 @@ data class Trigger(
         parcel.writeSerializable(startDate)
         parcel.writeSerializable(endDate)
         parcel.writeString(wifiSsid)
-        parcel.writeMap(data)
+        parcel.writeParcelable(data, flags) // CORRECCIÓN: Usar writeParcelable
     }
     override fun describeContents(): Int = 0
 }

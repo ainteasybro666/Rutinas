@@ -11,6 +11,7 @@ import com.example.rutinas.data.local.dao.ActionDao
 import com.example.rutinas.data.local.dao.RoutineDao
 import com.example.rutinas.data.local.dao.TriggerDao
 import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.DataWrapperTypeConverter
 import com.example.rutinas.data.model.Trigger
 import com.example.rutinas.data.model.RoutineEntity
 
@@ -19,7 +20,12 @@ import com.example.rutinas.data.model.RoutineEntity
     version = 4,
     exportSchema = false
 )
-@TypeConverters(Converters::class, FrequencyTypeConverter::class)
+@TypeConverters(
+    DataWrapperTypeConverter::class,
+    FrequencyTypeConverter::class,
+    LocalDateTimeConverter::class
+)
+
 abstract class AppDatabase : RoomDatabase() {
     abstract fun routineDao(): RoutineDao
     abstract fun triggerDao(): TriggerDao

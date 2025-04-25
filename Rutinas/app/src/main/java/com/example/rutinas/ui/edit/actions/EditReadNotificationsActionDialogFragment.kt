@@ -1,51 +1,45 @@
 package com.example.rutinas.ui.edit.actions
 
 import android.app.Dialog
-import android.app.NotificationManager
+import android.app.NotificationManager as AndroidNotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.os.Parcelable
 import android.provider.Settings
 import android.widget.SeekBar
 import androidx.appcompat.app.AlertDialog
-import androidx.fragment.app.DialogFragment
 import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.DataWrapper
 import com.example.rutinas.databinding.FragmentEditReadNotificationsActionBinding
+import com.example.rutinas.ui.edit.RoutineEditFragment
 import com.example.rutinas.util.NotificationReader
 import com.google.android.material.snackbar.Snackbar
-import kotlinx.parcelize.Parcelize
 import timber.log.Timber
 
-@Parcelize
-class EditReadNotificationsActionDialogFragment : DialogFragment(), Parcelable {
+class EditReadNotificationsActionDialogFragment(private val listener: RoutineEditFragment.ActionDialogListener) : BaseEditActionDialogFragment(listener), ActionEditorDialog {
     private var _binding: FragmentEditReadNotificationsActionBinding? = null
     private val binding get() = _binding!!
-    private lateinit var notificationReader: NotificationReader
-    private lateinit var action: Action
-    private var onActionUpdatedListener: ((Action) -> Unit)? = null
-
-    fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
-        onActionUpdatedListener = listener
-    }
+    private lateinit var notificationReader: NotificationReader // lateinit porque se inicializa mas tarde.
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        super.onCreateDialog(savedInstanceState)
         Timber.d("EditReadNotificationsActionDialogFragment: onCreateDialog() llamado")
         _binding = FragmentEditReadNotificationsActionBinding.inflate(layoutInflater)
 
-        try {
-            action = requireArguments().getSerializable(ARG_ACTION) as? Action
-                ?: throw IllegalArgumentException("No se pudo obtener la acción para editar")
 
-            Timber.d("EditReadNotificationsActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
-
-            checkNotificationAccess()
-            setupNotificationReader()
-            setupUI()
-            loadActionData()
-        } catch (e: Exception) {
-            Timber.e("EditReadNotificationsActionDialogFragment: Error al obtener la acción - ${e.message}")
-            e.printStackTrace()
+        if (action == null) {
+            Timber.e("EditReadNotificationsActionDialogFragment: Error al obtener la acción - No se pudo obtener la acción para editar")
+            throw IllegalArgumentException("No se pudo obtener la acción para editar")
+        } else {
+            try {
+                Timber.d("EditReadNotificationsActionDialogFragment: Acción recibida - tipo: ${action?.actionType}, datos: ${action?.data}")
+                checkNotificationAccess()
+                setupNotificationReader()
+                setupUI()
+                loadActionData()
+            } catch (e: Exception) {
+                Timber.e("EditReadNotificationsActionDialogFragment: Error al obtener la acción - ${e.message}")
+            }
         }
 
         return AlertDialog.Builder(requireContext())
@@ -87,7 +81,7 @@ class EditReadNotificationsActionDialogFragment : DialogFragment(), Parcelable {
         return enabledListeners?.contains(requireContext().packageName) == true
     }
 
-    private fun setupNotificationReader() {
+    private fun setupNotificationReader(){
         Timber.d("EditReadNotificationsActionDialogFragment: setupNotificationReader() llamado")
         notificationReader = NotificationReader(requireContext())
         notificationReader.initialize { success ->
@@ -138,23 +132,25 @@ class EditReadNotificationsActionDialogFragment : DialogFragment(), Parcelable {
 
     private fun loadActionData() {
         Timber.d("EditReadNotificationsActionDialogFragment: loadActionData() llamado")
-        try {
-            action.data["excludedPackages"]?.let { packages ->
-                if (packages is String) {
-                    Timber.d("EditReadNotificationsActionDialogFragment: Paquetes excluidos cargados: $packages")
-                    binding.etPackagesToExclude.setText(packages)
-                }
-            }
+        if (action != null) {
+            try{
+                action.data?.let { dataWrapper ->
+                    val data = dataWrapper.data
+                    data["excludedPackages"]?.let { packages ->
+                        Timber.d("EditReadNotificationsActionDialogFragment: Paquetes excluidos cargados: $packages")
+                        binding.etPackagesToExclude.setText(packages as String)
+                    }
 
-            action.data["delay"]?.let { delay ->
-                if (delay is Int) {
-                    Timber.d("EditReadNotificationsActionDialogFragment: Retraso cargado: $delay segundos")
-                    binding.seekBarDelay.progress = delay
-                    binding.tvDelayValue.text = "$delay segundos"
+                    data["delay"]?.let { delay ->
+                        Timber.d("EditReadNotificationsActionDialogFragment: Retraso cargado: $delay segundos")
+                        binding.seekBarDelay.progress = delay as Int
+                        binding.tvDelayValue.text = "$delay segundos"
+                    }
+
                 }
+            }catch(e: Exception){
+                Timber.e("EditReadNotificationsActionDialogFragment: Error al cargar datos - ${e.message}")
             }
-        } catch (e: Exception) {
-            Timber.e("EditReadNotificationsActionDialogFragment: Error al cargar datos - ${e.message}")
         }
     }
 
@@ -199,13 +195,14 @@ class EditReadNotificationsActionDialogFragment : DialogFragment(), Parcelable {
             Timber.d("EditReadNotificationsActionDialogFragment: Guardando - paquetes excluidos: $excludedPackages, retraso: $delay segundos")
 
             val updatedAction = action.copy(
-                data = mapOf(
+                data = DataWrapper(mapOf(
                     "excludedPackages" to excludedPackages,
                     "delay" to delay
-                )
+                ))
             )
+            actionUpdateListener?.invoke(updatedAction)
+            listener.onActionUpdated(updatedAction)
 
-            onActionUpdatedListener?.invoke(updatedAction)
             Timber.d("EditReadNotificationsActionDialogFragment: Acción actualizada y notificada")
         } catch (e: Exception) {
             Timber.e("EditReadNotificationsActionDialogFragment: Error al guardar acción - ${e.message}")
@@ -214,7 +211,9 @@ class EditReadNotificationsActionDialogFragment : DialogFragment(), Parcelable {
 
     override fun onDestroyView() {
         Timber.d("EditReadNotificationsActionDialogFragment: onDestroyView() llamado")
-        notificationReader.shutdown()
+        if(this::notificationReader.isInitialized){
+            notificationReader.shutdown()
+        }
         super.onDestroyView()
         _binding = null
     }
@@ -222,8 +221,8 @@ class EditReadNotificationsActionDialogFragment : DialogFragment(), Parcelable {
     companion object {
         private const val ARG_ACTION = "arg_action"
 
-        fun newInstance(action: Action): EditReadNotificationsActionDialogFragment {
-            return EditReadNotificationsActionDialogFragment().apply {
+        fun newInstance(action: Action, listener: RoutineEditFragment.ActionDialogListener): EditReadNotificationsActionDialogFragment {
+            return EditReadNotificationsActionDialogFragment(listener).apply {
                 arguments = Bundle().apply {
                     putParcelable(ARG_ACTION, action)
                 }
