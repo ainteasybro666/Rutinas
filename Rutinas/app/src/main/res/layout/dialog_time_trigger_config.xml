@@ -1,67 +1,103 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:orientation="vertical"
     android:padding="16dp">
 
     <TimePicker
         android:id="@+id/timePicker"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:timePickerMode="spinner" />
+        android:timePickerMode="spinner"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Frecuencia"
-        android:textAppearance="?attr/textAppearanceTitleMedium"
-        android:layout_marginTop="16dp" />
-
-    <RadioGroup
-        android:id="@+id/frequencyRadioGroup"
+    <CheckBox
+        android:id="@+id/checkboxWeekly"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp">
+        android:text="Repetir semanalmente"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/timePicker" />
 
-        <RadioButton
-            android:id="@+id/dailyRadioButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Diario" />
-
-        <RadioButton
-            android:id="@+id/weeklyRadioButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Semanal" />
-
-        <RadioButton
-            android:id="@+id/monthlyRadioButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Mensual" />
-    </RadioGroup>
-
-    <FrameLayout
-        android:id="@+id/weeklyContainer"
+    <LinearLayout
+        android:id="@+id/daysOfWeekGroup"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:visibility="gone">
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/checkboxWeekly">
 
-        <!-- El MultiSelectListPreference se inflará aquí mediante un PreferenceFragment -->
-    </FrameLayout>
+        <CheckBox
+            android:id="@+id/cbSunday"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="D" />
+
+        <CheckBox
+            android:id="@+id/cbMonday"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="L" />
+
+        <CheckBox
+            android:id="@+id/cbTuesday"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="M" />
+
+        <CheckBox
+            android:id="@+id/cbWednesday"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="X" />
+
+        <CheckBox
+            android:id="@+id/cbThursday"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="J" />
+
+        <CheckBox
+            android:id="@+id/cbFriday"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="V" />
+
+        <CheckBox
+            android:id="@+id/cbSaturday"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="S" />
+    </LinearLayout>
+    <CheckBox
+        android:id="@+id/checkboxMonthly"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Repetir mensualmente"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/daysOfWeekGroup" />
 
     <NumberPicker
-        android:id="@+id/dayOfMonthPicker"
+        android:id="@+id/dayOfMonth"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginTop="8dp"
         android:visibility="gone"
-        tools:minValue="1"
-        tools:maxValue="31" />
-</LinearLayout>
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/checkboxMonthly" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

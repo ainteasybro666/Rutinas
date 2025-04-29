@@ -64,17 +64,18 @@ class RoutineExecutor @Inject constructor(
 
     private suspend fun executeAction(action: Action, handler: Handler) {
         Timber.d("RoutineExecutor: executeAction called")
-        Timber.d("RoutineExecutor: Executing action: ${action.type}, data: ${action.data}, action id: ${action.uuid}")
-        when (action.type) {
-            ActionType.ALARM -> handleAlarmAction(action.data)
-            ActionType.ANNOUNCEMENT -> handleAnnouncementAction(action.data, handler)
-            ActionType.BRIGHTNESS -> handleBrightnessAction(action.data)
-            ActionType.READ_NOTIFICATIONS -> handleReadNotificationsAction(action.data)
-            ActionType.SOUND_MODE -> handleSoundModeAction(action.data)
+        Timber.d("RoutineExecutor: Executing action: ${action.actionType}, data: ${action.data}, action id: ${action.uuid}")
+        val actionType = ActionType.fromString(action.actionType)
+        when (actionType) {
+            ActionType.ALARM -> handleAlarmAction(action.data?.data)
+            ActionType.ANNOUNCEMENT -> handleAnnouncementAction(action.data?.data, handler)
+            ActionType.BRIGHTNESS -> handleBrightnessAction(action.data?.data)
+            ActionType.READ_NOTIFICATIONS -> handleReadNotificationsAction(action.data?.data)
+            ActionType.SOUND_MODE -> handleSoundModeAction(action.data?.data)
             ActionType.TIME -> handleTimeAction(handler)
-            ActionType.VOLUME -> handleVolumeAction(action.data)
+            ActionType.VOLUME -> handleVolumeAction(action.data?.data)
             ActionType.PAUSE -> handlePauseAction(action)
-            else -> Timber.w("RoutineExecutor: Unknown action type: ${action.type}")
+            else -> Timber.w("RoutineExecutor: Unknown action type: ${action.actionType}")
         }
     }
 

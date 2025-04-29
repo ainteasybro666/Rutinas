@@ -5,31 +5,38 @@
     android:layout_height="wrap_content"
     android:padding="16dp">
 
-    <TextView
-        android:id="@+id/tvBrightness"
-        android:layout_width="wrap_content"
+    <EditText
+        android:id="@+id/etLatitude"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="Nivel de brillo"
+        android:hint="Latitud"
+        android:inputType="numberDecimal"
+        app:layout_constraintEnd_toStartOf="@+id/etLongitude"
+        app:layout_constraintHorizontal_bias="0.5"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <SeekBar
-        android:id="@+id/sbBrightness"
+    <EditText
+        android:id="@+id/etLongitude"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:hint="Longitud"
+        android:inputType="numberDecimal"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/tvBrightness" />
+        app:layout_constraintHorizontal_bias="0.5"
+        app:layout_constraintStart_toEndOf="@+id/etLatitude"
+        app:layout_constraintTop_toTopOf="parent" />
 
-    <com.google.android.material.switchmaterial.SwitchMaterial
-        android:id="@+id/switchAutomatic"
+    <EditText
+        android:id="@+id/etRadius"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="Brillo automático"
+        android:hint="Radio (metros)"
+        android:inputType="number"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/sbBrightness" />
+        app:layout_constraintTop_toBottomOf="@+id/etLatitude" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
+

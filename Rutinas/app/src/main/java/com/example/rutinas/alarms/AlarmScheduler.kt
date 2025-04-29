@@ -22,7 +22,7 @@ class AlarmScheduler @Inject constructor(
         context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
     fun schedule(routine: Routine) {
-        Timber.d("Programando alarmas para la rutina: ${'$'}{routine.uuid}, ${'$'}{routine.name}")
+        Timber.d("Programando alarmas para la rutina: ${routine.uuid}, ${routine.name}")
 
         // Cancelar alarmas existentes antes de programar nuevas
         cancel(routine)
@@ -32,9 +32,9 @@ class AlarmScheduler @Inject constructor(
     }
 
     private fun scheduleTimeTrigger(routine: Routine, trigger: Trigger) {
-        val hour      = trigger.data["hour"]   as? Int
-        val minute    = trigger.data["minute"] as? Int
-        val frequency = trigger.data["frequency"] as? String ?: "daily"
+        val hour = trigger.data.data["hour"] as? Int
+        val minute = trigger.data.data["minute"] as? Int
+        val frequency = trigger.data.data["frequency"] as? String ?: "daily"
 
         if (hour == null || minute == null) {
             throw IllegalArgumentException("Hour and minute must be specified for time triggers.")
@@ -50,10 +50,11 @@ class AlarmScheduler @Inject constructor(
             when (frequency) {
                 "daily" -> if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_MONTH, 1)
                 "weekly" -> {
-                    val daysOfWeek = trigger.data["daysOfWeek"] as? List<Int>
+                    val daysOfWeek = trigger.data.data["daysOfWeek"] as? List<Int>
                     if (daysOfWeek.isNullOrEmpty()) return
                     while (timeInMillis <= System.currentTimeMillis() ||
-                        !daysOfWeek.contains(get(Calendar.DAY_OF_WEEK) - 1)) {
+                        !daysOfWeek.contains(get(Calendar.DAY_OF_WEEK) - 1)
+                    ) {
                         add(Calendar.DAY_OF_WEEK, 1)
                     }
                 }
@@ -63,26 +64,27 @@ class AlarmScheduler @Inject constructor(
             // Segundo: ajustes adicionales según frecuencia
             when (frequency) {
                 "weekly" -> {
-                    val daysOfWeek = trigger.data["daysOfWeek"] as? List<Int> ?: return
+                    val daysOfWeek = trigger.data.data["daysOfWeek"] as? List<Int> ?: return
                     val target = (daysOfWeek.minOrNull() ?: return) + 1
                     while (get(Calendar.DAY_OF_WEEK) != target) add(Calendar.DAY_OF_WEEK, 1)
                 }
                 "monthly" -> {
-                    val dayOfMonth = (trigger.data["dayOfMonth"] as? Number)?.toInt() ?: 1
+                    val dayOfMonth = (trigger.data.data["dayOfMonth"] as? Number)?.toInt() ?: 1
                     set(Calendar.DAY_OF_MONTH, dayOfMonth)
                     if (get(Calendar.DAY_OF_MONTH) != dayOfMonth) {
                         set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
                     }
                 }
-                else -> { /* daily no ajustes extra */ }
+                else -> {
+                }
             }
         }
 
-        val alarmId      = generateAlarmId(routine, trigger)
+        val alarmId = generateAlarmId(routine, trigger)
         val pendingIntent = createPendingIntent(routine, alarmId)
 
         // Log usando la variable 'frequency' declarada fuera del apply
-        Timber.d("Programando alarma ${'$'}frequency para ${'$'}hour:${'$'}minute (${routine.name}), id: ${'$'}alarmId, time: ${'$'}{calendar.time}")
+        Timber.d("Programando alarma $frequency para $hour:$minute (${routine.name}), id: $alarmId, time: ${calendar.time}")
 
         if (canScheduleExactAlarms()) {
             alarmManager.setExact(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)

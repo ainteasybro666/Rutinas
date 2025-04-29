@@ -1,10 +1,9 @@
-// ActionType.kt
 package com.example.rutinas.data.model
 
 enum class ActionType {
     ANNOUNCEMENT,
     ALARM,
-    READ_NOTIFICATIONS, //Old NOTIFICATIONS
+    READ_NOTIFICATIONS,
     TIME,
     VOLUME,
     BRIGHTNESS,
@@ -12,17 +11,31 @@ enum class ActionType {
     PAUSE;
 
     companion object {
-        fun fromString(type: ActionType): ActionType {
-            return when (type) {
-                ActionType.ANNOUNCEMENT -> ActionType.ANNOUNCEMENT
-                ActionType.ALARM -> ActionType.ALARM
-                ActionType.READ_NOTIFICATIONS -> ActionType.READ_NOTIFICATIONS
-                ActionType.TIME -> ActionType.TIME
-                ActionType.VOLUME -> ActionType.VOLUME
-                ActionType.BRIGHTNESS -> ActionType.BRIGHTNESS
-                ActionType.SOUND_MODE -> ActionType.SOUND_MODE
-                ActionType.PAUSE -> ActionType.PAUSE
+        fun fromString(value: String): ActionType {
+            return when (value) {
+                "ANNOUNCEMENT" -> ANNOUNCEMENT
+                "ALARM" -> ALARM
+                "READ_NOTIFICATIONS" -> READ_NOTIFICATIONS
+                "TIME" -> TIME
+                "VOLUME" -> VOLUME
+                "BRIGHTNESS" -> BRIGHTNESS
+                "SOUND_MODE" -> SOUND_MODE
+                "PAUSE" -> PAUSE
+                else -> throw IllegalArgumentException("Invalid ActionType value: $value")
             }
+        }
+    }
+
+    override fun toString(): String {
+        return when (this) {
+            ANNOUNCEMENT -> "ANNOUNCEMENT"
+            ALARM -> "ALARM"
+            READ_NOTIFICATIONS -> "READ_NOTIFICATIONS"
+            TIME -> "TIME"
+            VOLUME -> "VOLUME"
+            BRIGHTNESS -> "BRIGHTNESS"
+            SOUND_MODE -> "SOUND_MODE"
+            PAUSE -> "PAUSE"
         }
     }
 }

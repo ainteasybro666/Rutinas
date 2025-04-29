@@ -15,8 +15,9 @@ import com.example.rutinas.databinding.FragmentEditAlarmActionBinding
 import com.example.rutinas.ui.edit.RoutineEditFragment
 import timber.log.Timber
 
-class EditAlarmActionDialogFragment(private val listener: RoutineEditFragment.ActionDialogListener) : BaseEditActionDialogFragment(listener), ActionEditorDialog {
-
+class EditAlarmActionDialogFragment : BaseEditActionDialogFragment() {
+    private var _binding: FragmentEditAlarmActionBinding? = null
+    private val binding get() = _binding!!
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         super.onCreateDialog(savedInstanceState)
@@ -59,7 +60,7 @@ class EditAlarmActionDialogFragment(private val listener: RoutineEditFragment.Ac
         Timber.d("EditAlarmActionDialogFragment: loadActionData() llamado")
         try {
             action.data.let { dataWrapper ->
-                dataWrapper?.data?.let { data ->
+                dataWrapper.data.let { data ->
                     val duration = (data["duration"] as? Int) ?: 30 // Valor predeterminado si es nulo
                     val repeatEnabled = (data["repeatEnabled"] as? Boolean) ?: false // Valor predeterminado si es nulo
 
@@ -98,7 +99,6 @@ class EditAlarmActionDialogFragment(private val listener: RoutineEditFragment.Ac
                 )
             )
             actionUpdateListener?.invoke(updatedAction)
-            listener.onActionUpdated(updatedAction)
             Timber.d("EditAlarmActionDialogFragment: Acción actualizada y notificada")
         } catch (e: Exception) {
             Timber.e("EditAlarmActionDialogFragment: Error al guardar acción - ${e.message}")
@@ -115,9 +115,9 @@ class EditAlarmActionDialogFragment(private val listener: RoutineEditFragment.Ac
         const val ARG_ACTION = "arg_action"
 
         fun newInstance(
-            action: Action, listener: RoutineEditFragment.ActionDialogListener
+            action: Action
         ): EditAlarmActionDialogFragment {
-            return EditAlarmActionDialogFragment(listener).apply {
+            return EditAlarmActionDialogFragment().apply {
                 arguments = Bundle().apply {
                     putParcelable(ARG_ACTION, action)
                 }

@@ -2,16 +2,14 @@ package com.example.rutinas.ui.main.adapter
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.example.rutinas.data.model.Trigger
 import com.example.rutinas.databinding.ItemTriggerBinding
 import timber.log.Timber
-import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.ListAdapter
-
 
 class TriggerAdapter(
-
     private val onTriggerDeleted: (Trigger) -> Unit
 ) : ListAdapter<Trigger, TriggerAdapter.TriggerViewHolder>(TriggerDiffCallback()) {
 
@@ -24,13 +22,14 @@ class TriggerAdapter(
                 // Configurar el texto según el tipo de trigger
                 when (trigger.triggerType) {
                     "TIME" -> {
-                        val hour = trigger.data["hour"] as? Int
-                        val minute = trigger.data["minute"] as? Int
-                        val frequency = trigger.data["frequency"] as? String
-                        val daysOfWeek = trigger.data["daysOfWeek"] as? List<Int>
-                        val dayOfMonth = trigger.data["dayOfMonth"] as? Int
+                        val hour = trigger.data.data["hour"] as? Int
+                        val minute = trigger.data.data["minute"] as? Int
+                        val frequency = trigger.data.data["frequency"] as? String
+                        val daysOfWeek = trigger.data.data["daysOfWeek"] as? List<Int>
+                        val dayOfMonth = trigger.data.data["dayOfMonth"] as? Int
 
-                        val timeText = if (hour != null && minute != null) String.format("%02d:%02d", hour, minute) else "Hora no especificada"
+                        val timeText =
+                            if (hour != null && minute != null) String.format("%02d:%02d", hour, minute) else "Hora no especificada"
 
                         tvTriggerType.text = "Tiempo"
                         tvTriggerDetails.text = when (frequency) {
@@ -40,10 +39,11 @@ class TriggerAdapter(
                             else -> "A las $timeText" // Fallback
                         }
                     }
+
                     "CALENDAR" -> {
-                        val day = trigger.data["day"] as? Int
-                        val month = trigger.data["month"] as? Int
-                        val year = trigger.data["year"] as? Int
+                        val day = trigger.data.data["day"] as? Int
+                        val month = trigger.data.data["month"] as? Int
+                        val year = trigger.data.data["year"] as? Int
 
                         tvTriggerType.text = "Calendario"
                         tvTriggerDetails.text = if (day != null && month != null && year != null) {
@@ -52,9 +52,10 @@ class TriggerAdapter(
                             "Fecha no especificada"
                         }
                     }
+
                     "LOCATION" -> {
-                        val latitude = trigger.data["latitude"] as? Double
-                        val longitude = trigger.data["longitude"] as? Double
+                        val latitude = trigger.data.data["latitude"] as? Double
+                        val longitude = trigger.data.data["longitude"] as? Double
 
                         tvTriggerType.text = "Ubicación"
                         tvTriggerDetails.text = if (latitude != null && longitude != null) {
@@ -63,6 +64,7 @@ class TriggerAdapter(
                             "Ubicación no especificada"
                         }
                     }
+
                     else -> {
                         tvTriggerType.text = "Desconocido"
                         tvTriggerDetails.text = "Tipo de trigger desconocido"
@@ -111,7 +113,4 @@ class TriggerAdapter(
         override fun areItemsTheSame(oldItem: Trigger, newItem: Trigger): Boolean = oldItem.id == newItem.id
         override fun areContentsTheSame(oldItem: Trigger, newItem: Trigger): Boolean = oldItem == newItem
     }
-
-
 }
-

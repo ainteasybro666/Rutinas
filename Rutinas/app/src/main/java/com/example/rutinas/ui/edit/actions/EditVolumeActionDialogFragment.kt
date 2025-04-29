@@ -22,7 +22,7 @@ class EditVolumeActionDialogFragment(listener: RoutineEditFragment.ActionDialogL
         _binding = FragmentEditVolumeActionBinding.inflate(layoutInflater)
 
         try {
-            Timber.d("EditVolumeActionDialogFragment: Acción recibida - tipo: ${action.actionType}, datos: ${action.data}")
+            Timber.d("EditVolumeActionDialogFragment: Acción recibida - tipo: ${action.type}, datos: ${action.data}")
 
             setupUI()
             loadActionData()

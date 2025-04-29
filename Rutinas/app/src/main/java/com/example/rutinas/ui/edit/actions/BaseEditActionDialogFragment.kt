@@ -1,20 +1,16 @@
 package com.example.rutinas.ui.edit.actions
 
 import android.app.Dialog
-import android.content.DialogInterface
-import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import androidx.appcompat.app.AlertDialog
 import android.view.ViewGroup
 import android.view.Window
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.example.rutinas.data.model.Action
+import com.example.rutinas.ui.edit.RoutineEditFragment
 import timber.log.Timber
 
-
-abstract class BaseEditActionDialogFragment : DialogFragment(), ActionEditorDialog {
+abstract class BaseEditActionDialogFragment(private val listener: RoutineEditFragment.ActionDialogListener) : DialogFragment() {
 
     // To avoid showing the error dialog multiple times.
     private var errorDialogShown = false
@@ -70,5 +66,11 @@ abstract class BaseEditActionDialogFragment : DialogFragment(), ActionEditorDial
             .setMessage(message)
             .setPositiveButton("Aceptar", null)
             .show()
+    }
+    fun setOnActionUpdatedListener(listener: (Action) -> Unit) {
+        this.actionUpdateListener = listener
+    }
+    protected fun notifyActionUpdated(updatedAction: Action){
+        listener.onActionUpdated(updatedAction)
     }
 }

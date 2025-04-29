@@ -62,9 +62,6 @@ class RoutineEditViewModel @Inject constructor(
     //  No es necesario llamar a repository.updateActions aquí, ya que las acciones se guardan/actualizan individualmente.
     fun updateActions(newActions: List<Action>) {
         Timber.d("Actualizando lista de acciones (sin guardar en repositorio): $newActions")
-        viewModelScope.launch {
-            repository.updateActions(newActions)
-        }
         _actions.value = newActions
     }
 
@@ -83,9 +80,9 @@ class RoutineEditViewModel @Inject constructor(
             // Validaciones de triggers
             for (trigger in triggers) {
                 if (trigger.triggerType == "TIME") {
-                    val frequency = trigger.data["frequency"] as? String
-                    val daysOfWeek = trigger.data["daysOfWeek"] as? List<Int>
-                    val dayOfMonth = trigger.data["dayOfMonth"] as? Int
+                    val frequency = trigger.data.data["frequency"] as? String
+                    val daysOfWeek = trigger.data.data["daysOfWeek"] as? List<Int>
+                    val dayOfMonth = trigger.data.data["dayOfMonth"] as? Int
 
                     if (frequency == "weekly" && (daysOfWeek == null || daysOfWeek.isEmpty())) {
                         _saveResult.emit(Resource.Error("Debes seleccionar al menos un día de la semana para un trigger semanal."))
