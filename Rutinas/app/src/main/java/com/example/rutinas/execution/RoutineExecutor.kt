@@ -4,9 +4,12 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.media.AudioManager
+import android.media.RingtoneManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import androidx.core.app.NotificationCompat
@@ -15,7 +18,7 @@ import com.example.rutinas.R
 import com.example.rutinas.data.model.Action
 import com.example.rutinas.data.model.ActionType
 import com.example.rutinas.domain.Routine
-import com.example.rutinas.utils.NotificationReader // Assuming this exists
+import com.example.rutinas.utils.NotificationReader
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -44,7 +47,7 @@ class RoutineExecutor @Inject constructor(
     init {
         createNotificationChannel()
         initializeTextToSpeech()
-        notificationReader.initialize {} // Assuming initialize doesn't need a callback
+        notificationReader.initialize {}
     }
 
 
@@ -85,12 +88,45 @@ class RoutineExecutor @Inject constructor(
         val repeatEnabled = data?.get("repeatEnabled") as? Boolean ?: false
 
         Timber.i("RoutineExecutor: Triggering ALARM action - duration: $duration, repeat: $repeatEnabled")
-        // TODO: Implement alarm logic here.  This might involve:
-        //  - Playing a sound
-        //  - Vibrating the device
-        //  - Showing a notification
-        //  - Potentially scheduling a repeating alarm if repeatEnabled is true
-        // You'll likely need to use the AudioManager, Vibrator, and potentially the AlarmManager.\n        // Example (requires permissions in manifest):\n        //  val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator\n        //  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {\n        //      vibrator.vibrate(VibrationEffect.createOneShot(duration * 1000L, VibrationEffect.DEFAULT_AMPLITUDE))\n        //  } else {\n        //      vibrator.vibrate(duration * 1000L)\n        //  }
+
+        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        val notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        val ringtone = RingtoneManager.getRingtone(context, notificationUri)
+
+        val pattern = longArrayOf(0, 500, 200, 500) // Vibrate for 500ms, pause for 200ms, repeat
+        val vibrationEffect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            VibrationEffect.createWaveform(pattern, 0)
+        } else {
+            null
+        }
+
+        try {
+            ringtone.play()
+            if (vibrationEffect != null) {
+                vibrator.vibrate(vibrationEffect)
+            } else {
+                vibrator.vibrate(pattern, 0) // Older versions
+            }
+
+            displayNotification(
+                mapOf(
+                    "title" to "Alarm Triggered",
+                    "text" to "An alarm action has been triggered."
+                )
+            )
+        } catch (e: Exception) {
+            Timber.e(e, "Error playing alarm")
+        }
+
+        if (repeatEnabled) {
+            //TODO implement repeating alarm
+            Timber.w("Repeating alarms not implemented yet")
+        }
+        val handler = Handler(Looper.getMainLooper())
+        handler.postDelayed({
+            ringtone.stop()
+            vibrator.cancel()
+        }, duration * 1000L.toLong())
     }
 
 
@@ -285,7 +321,7 @@ class RoutineExecutor @Inject constructor(
         val text = data["text"] ?: "A routine action was triggered."
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification) // Replace with your notification icon
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)

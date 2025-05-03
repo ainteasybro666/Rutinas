@@ -5,8 +5,9 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import com.example.rutinas.domain.Routine
 import com.example.rutinas.data.model.RoutineEntity
+import com.example.rutinas.data.repository.RoutineRepository
+import com.example.rutinas.domain.Routine
 import com.example.rutinas.data.model.Trigger
 import com.example.rutinas.receivers.AlarmReceiver
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -15,7 +16,8 @@ import java.util.Calendar
 import javax.inject.Inject
 
 class AlarmScheduler @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val routineRepository: RoutineRepository // Inject RoutineRepository here
 ) {
 
     private val alarmManager: AlarmManager =
@@ -116,21 +118,27 @@ class AlarmScheduler @Inject constructor(
         return "${routine.uuid}-${trigger.uuid}".hashCode()
     }
 
-    // TODO: This method MUST be replaced with the actual implementation to retrieve a RoutineEntity
-    // from your Room database based on the UUID.
-    // You need to use your Room DAO (e.g., routineDao) to fetch the RoutineEntity.
-    // Example: return routineDao.getRoutineByUuid(uuid)
-    private fun getRoutineEntityByUuid(uuid: String): RoutineEntity {
-        // Example (replace with your Room DAO): routineDao.getRoutineByUuid(uuid)
-        throw NotImplementedError("getRoutineEntityByUuid(uuid) is not implemented yet.")
+    // Now this method uses RoutineRepository to get the RoutineEntity
+    private suspend fun getRoutineEntityByUuid(uuid: String): RoutineEntity? {
+        Timber.d("Buscando rutina en la base de datos con UUID: $uuid")
+        val routine = routineRepository.getRoutineByUuid(uuid)
+        return routine?.let { // Convertir de Routine a RoutineEntity
+            RoutineEntity(
+                id = it.id,
+                uuid = it.uuid,
+                name = it.name,
+                description = it.description,
+                isEnabled = it.isEnabled,
+                createdDate = it.createdDate
+            )
+        }
     }
 
     private fun createPendingIntent(routine: Routine, alarmId: Int): PendingIntent {
         //  Obtener la RoutineEntity a partir del UUID.  Adaptar esto según tu implementación.
-        val routineEntity = getRoutineEntityByUuid(routine.uuid)  //  Asumiendo que este método existe
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId)
-            putExtra(AlarmReceiver.EXTRA_ROUTINE_UUID, routineEntity.uuid)  // Pasar UUID
+            putExtra(AlarmReceiver.EXTRA_ROUTINE_UUID, routine.uuid)  // Pasar UUID
         }
         return PendingIntent.getBroadcast(
             context,
@@ -140,29 +148,13 @@ class AlarmScheduler @Inject constructor(
         )
     }
 
-    fun rescheduleAll() {
-        //TODO: Need to implement this properly, get all active routines
+    suspend fun rescheduleAll() {
         Timber.d("Reprogramando todas las alarmas...")
-        // TODO: Obtener todas las rutinas activas del ViewModel o Repository
-        //  y llamar a schedule(routine) para cada una
-        //  Por ahora, un ejemplo con una rutina হার্ডcodeada
-        //  Esto se DEBE cambiar
-        /*val rutinaHardcodeada = Routine(
-            uuid = "123e4567-e89b-12d3-a456-426614174000",
-            name = "Rutina de prueba",
-            triggers = listOf(
-                Trigger(
-                    type = Trigger.TriggerType.TIME.name,
-                    hour = 8,
-                    minute = 0,
-                    frequency = "daily"
-                )
-            ),
-            actions = emptyList(),
-            isActive = true
-        )
-        schedule(rutinaHardcodeada)*/
-        Timber.d("La reprogramación total de alarmas está implementada a medias. Ver TODO.")
+        routineRepository.getAllRoutines().collect{ routines ->
+            routines.filter { it.isEnabled }.forEach{ routine ->
+                schedule(routine)
+            }
+        }
     }
 
     fun canScheduleExactAlarms(): Boolean {

@@ -14,8 +14,8 @@ abstract class BaseFragment : Fragment() {
         get() = _binding!!
 
     /**
-     * Método abstracto para inflar el binding.
-     * Cada fragmento deberá implementar este método y devolver su instancia de ViewBinding.
+     * Méto-do abstracto para inflar el binding.
+     * Cada fragmento deberá implementar este méto-do y devolver su instancia de ViewBinding.
      */
     abstract fun inflateBinding(inflater: LayoutInflater, container: ViewGroup?): ViewBinding
 
