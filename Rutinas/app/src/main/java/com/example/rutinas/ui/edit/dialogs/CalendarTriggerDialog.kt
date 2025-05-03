@@ -3,7 +3,6 @@ package com.example.rutinas.ui.edit.dialogs
 import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.view.ViewGroup
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.example.rutinas.data.model.DataWrapper
@@ -21,9 +20,13 @@ class CalendarTriggerDialog : DialogFragment() {
     private val binding get() = _binding!!
     private var calendarTriggerListener: CalendarTriggerListener? = null
 
+    private var routineId: Long = 0
+
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         Timber.d("CalendarTriggerDialog: onCreateDialog() llamado")
         _binding = DialogCalendarTriggerConfigBinding.inflate(LayoutInflater.from(context))
+
+        routineId = arguments?.getLong("routineId") ?: 0
 
         val calendar = Calendar.getInstance()
         val currentYear = calendar.get(Calendar.YEAR)
@@ -46,6 +49,7 @@ class CalendarTriggerDialog : DialogFragment() {
         val year = binding.datePicker.year
 
         val trigger = Trigger(
+            routineId = routineId,
             triggerType = "CALENDAR",
             data = DataWrapper(
                 mapOf(
@@ -68,8 +72,12 @@ class CalendarTriggerDialog : DialogFragment() {
     }
 
     companion object {
-        fun createInstance(): CalendarTriggerDialog {
-            return CalendarTriggerDialog()
+        fun createInstance(routineId: Long): CalendarTriggerDialog {
+            val dialog = CalendarTriggerDialog()
+            val args = Bundle()
+            args.putLong("routineId", routineId)
+            dialog.arguments = args
+            return dialog
         }
     }
 }

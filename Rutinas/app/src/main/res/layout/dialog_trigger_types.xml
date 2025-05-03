@@ -5,16 +5,21 @@
     android:orientation="vertical"
     android:padding="16dp">
 
-    <TextView
+    <Button
+        android:id="@+id/btnTimeTrigger"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Seleccione el tipo de trigger:"
-        android:textAppearance="@style/TextAppearance.AppCompat.Medium" />
+        android:text="Time" />
 
-    <Spinner
-        android:id="@+id/spinnerTriggerTypes"
+    <Button
+        android:id="@+id/btnCalendarTrigger"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp" />
+        android:text="Calendar" />
 
+    <Button
+        android:id="@+id/btnLocationTrigger"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Location" />
 </LinearLayout>

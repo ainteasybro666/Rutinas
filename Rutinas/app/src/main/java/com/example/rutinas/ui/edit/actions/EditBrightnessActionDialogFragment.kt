@@ -1,70 +1,80 @@
 package com.example.rutinas.ui.edit.actions
 
-import android.app.Dialog
 import android.os.Bundle
-import androidx.appcompat.app.AlertDialog
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import androidx.viewbinding.ViewBinding
 import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.ActionType
 import com.example.rutinas.data.model.DataWrapper
 import com.example.rutinas.databinding.FragmentEditBrightnessActionBinding
+import com.example.rutinas.ui.edit.ActionDialogListener
 import timber.log.Timber
 
-class EditBrightnessActionDialogFragment : BaseEditActionDialogFragment() {
+class EditBrightnessActionDialogFragment(listener: ActionDialogListener) : BaseEditActionDialogFragment(listener) {
     private var _binding: FragmentEditBrightnessActionBinding? = null
     private val binding get() = _binding!!
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        super.onCreateDialog(savedInstanceState)
-        Timber.d("EditBrightnessActionDialogFragment: onCreateDialog() llamado")
-        _binding = FragmentEditBrightnessActionBinding.inflate(layoutInflater)
-        val dialog = AlertDialog.Builder(requireContext())
-            .setView(binding.root)
-            .setPositiveButton("Guardar") { _, _ -> saveAction() }
-            .setNegativeButton("Cancelar") { _, _ -> dismiss() }
-            .create()
-        loadActionData()
-        return dialog
+
+    companion object {
+        fun newInstance(action: Action, listener: ActionDialogListener): EditBrightnessActionDialogFragment {
+            return EditBrightnessActionDialogFragment(listener).apply {
+                arguments = newBundle(action)
+            }
+        }
     }
+
+    override fun inflateBinding(inflater: LayoutInflater, container: ViewGroup?): ViewBinding {
+        _binding = FragmentEditBrightnessActionBinding.inflate(inflater, container, false)
+        return binding
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        Timber.d("EditBrightnessActionDialogFragment: onViewCreated() llamado")
+        loadActionData()
+    }
+
     private fun loadActionData() {
         Timber.d("EditBrightnessActionDialogFragment: loadActionData() llamado")
         try {
-            action.data.let { dataWrapper ->
+            action.data?.let { dataWrapper ->
                 dataWrapper.data.let { data ->
-                    binding.etValue.setText(data["value"]?.toString() ?: "100")
+                    val value = data["value"] as? Int ?: 100
+                    val automatic = data["automatic"] as? Boolean ?: false
+                    binding.sbBrightness.progress = value
+                    binding.switchAutomatic.isChecked = automatic
                 }
             }
         } catch (e: Exception) {
             Timber.e("EditBrightnessActionDialogFragment: Error al cargar datos - ${e.message}")
         }
     }
-    private fun saveAction() {
+
+    override fun saveAction() {
         Timber.d("EditBrightnessActionDialogFragment: saveAction() llamado")
         try {
-            val value = binding.etValue.text.toString().toInt()
+            val value = binding.sbBrightness.progress
+            val automatic = binding.switchAutomatic.isChecked
             val updatedAction = action.copy(
+                actionType = ActionType.BRIGHTNESS,
                 data = DataWrapper(
                     mapOf(
-                        "value" to value
+                        "value" to value,
+                        "automatic" to automatic
                     )
                 )
             )
-            actionUpdateListener?.invoke(updatedAction)
+            notifyActionUpdated(updatedAction)
             Timber.d("EditBrightnessActionDialogFragment: Acción actualizada y notificada")
         } catch (e: Exception) {
             Timber.e("EditBrightnessActionDialogFragment: Error al guardar acción - ${e.message}")
         }
     }
+
     override fun onDestroyView() {
         Timber.d("EditBrightnessActionDialogFragment: onDestroyView() llamado")
         super.onDestroyView()
         _binding = null
-    }
-    companion object {
-        const val ARG_ACTION = "arg_action"
-        fun newInstance(action: Action): EditBrightnessActionDialogFragment {
-            return EditBrightnessActionDialogFragment().apply {
-                arguments = Bundle().apply {
-                    putParcelable(ARG_ACTION, action)
-                }
-            }
-        }
     }
 }

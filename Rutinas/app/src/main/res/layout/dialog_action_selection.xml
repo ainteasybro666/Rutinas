@@ -5,16 +5,63 @@
     android:orientation="vertical"
     android:padding="16dp">
 
-    <TextView
+    <Button
+        android:id="@+id/btnSelectAction"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Seleccione el tipo de acción:"
-        android:textAppearance="@style/TextAppearance.AppCompat.Medium" />
-
-    <Spinner
-        android:id="@+id/spinnerActionTypes"
+        android:text="Seleccionar accion"
+        />
+    <RadioGroup
+        android:id="@+id/rgActionTypes"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp" />
+        android:layout_height="wrap_content">
 
+        <RadioButton
+            android:id="@+id/rbAlarm"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Alarma" />
+
+        <RadioButton
+            android:id="@+id/rbAnnouncement"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Anuncio" />
+
+        <RadioButton
+            android:id="@+id/rbBrightness"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Brillo" />
+
+        <RadioButton
+            android:id="@+id/rbVolume"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Volumen" />
+
+        <RadioButton
+            android:id="@+id/rbSoundMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Modo de sonido" />
+
+        <RadioButton
+            android:id="@+id/rbTime"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tiempo" />
+
+        <RadioButton
+            android:id="@+id/rbReadNotifications"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Leer notificaciones" />
+
+        <RadioButton
+            android:id="@+id/rbPause"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Pausa" />
+    </RadioGroup>
 </LinearLayout>

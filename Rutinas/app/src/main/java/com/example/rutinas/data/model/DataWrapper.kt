@@ -4,78 +4,49 @@ import android.os.Parcel
 import android.os.Parcelable
 import kotlinx.parcelize.Parceler
 import kotlinx.parcelize.Parcelize
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.ObjectInputStream
+import java.io.ObjectOutputStream
 
 @Parcelize
-data class DataWrapper(
-    val data: Map<String, Any>? = null
-) : Parcelable {
+data class DataWrapper(val data: Map<String, Any> = emptyMap()) : Parcelable {
+
     companion object : Parceler<DataWrapper> {
+
         override fun create(parcel: Parcel): DataWrapper {
-            val data = parcel.readHashMap(HashMap::class.java.classLoader) as? Map<String, Any>
-            return DataWrapper(data)
+            val serializedMap = parcel.readString()
+            val map = deserializeMap(serializedMap) ?: emptyMap()
+            return DataWrapper(map)
         }
 
         override fun DataWrapper.write(parcel: Parcel, flags: Int) {
-            parcel.writeMap(this.data)
+            val serializedMap = serializeMap(data)
+            parcel.writeString(serializedMap)
         }
-    }
-}
 
-object AnyParceler : Parceler<Any> {
-    override fun create(parcel: Parcel): Any {
-        return when (val type = parcel.readString()) {
-            "String" -> parcel.readString()!!
-            "Int" -> parcel.readInt()
-            "Boolean" -> parcel.readBoolean()
-            "Map" -> MapStringAnyParceler.create(parcel)
-            else -> throw IllegalArgumentException("Unsupported type: $type")
+        private fun serializeMap(map: Map<String, Any>): String? {
+            return try {
+                val byteArrayOutputStream = ByteArrayOutputStream()
+                ObjectOutputStream(byteArrayOutputStream).use { objectOutputStream ->
+                    objectOutputStream.writeObject(map)
+                }
+                byteArrayOutputStream.toString("ISO-8859-1")
+            } catch (e: Exception) {
+                null
+            }
         }
-    }
-
-    override fun Any.write(parcel: Parcel, flags: Int) {
-        when (this) {
-            is String -> {
-                parcel.writeString("String")
-                parcel.writeString(this)
+        @Suppress("UNCHECKED_CAST")
+        private fun deserializeMap(serializedMap: String?): Map<String, Any>? {
+            if (serializedMap == null) return null
+            return try {
+                val byteArrayInputStream = ByteArrayInputStream(serializedMap.toByteArray(charset("ISO-8859-1")))
+                ObjectInputStream(byteArrayInputStream).use { objectInputStream ->
+                    objectInputStream.readObject() as? Map<String, Any>
+                }
+            } catch (e: Exception) {
+                null
             }
-
-            is Int -> {
-                parcel.writeString("Int")
-                parcel.writeInt(this)
-            }
-
-            is Boolean -> {
-                parcel.writeString("Boolean")
-                parcel.writeBoolean(this)
-            }
-
-            is Map<*, *> -> {
-                parcel.writeString("Map")
-                MapStringAnyParceler.write(this as Map<String, Any>, parcel, flags)
-            }
-
-            else -> throw IllegalArgumentException("Unsupported value type: ${this.javaClass.name}")
-        }
-    }
-}
-
-object MapStringAnyParceler : Parceler<Map<String, Any>> {
-    override fun create(parcel: Parcel): Map<String, Any> {
-        val map = mutableMapOf<String, Any>()
-        val size = parcel.readInt()
-        for (i in 0 until size) {
-            val key = parcel.readString()!!
-            val value = AnyParceler.create(parcel)
-            map[key] = value
-        }
-        return map
-    }
-
-    override fun Map<String, Any>.write(parcel: Parcel, flags: Int) {
-        parcel.writeInt(this.size)
-        for ((key, value) in this) {
-            parcel.writeString(key)
-            AnyParceler.write(value, parcel, flags)
         }
     }
 }

@@ -15,7 +15,7 @@ import com.example.rutinas.R
 import com.example.rutinas.data.model.Action
 import com.example.rutinas.data.model.ActionType
 import com.example.rutinas.domain.Routine
-import com.example.rutinas.util.NotificationReader // Assuming this exists
+import com.example.rutinas.utils.NotificationReader // Assuming this exists
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,7 +65,7 @@ class RoutineExecutor @Inject constructor(
     private suspend fun executeAction(action: Action, handler: Handler) {
         Timber.d("RoutineExecutor: executeAction called")
         Timber.d("RoutineExecutor: Executing action: ${action.actionType}, data: ${action.data}, action id: ${action.uuid}")
-        val actionType = ActionType.fromString(action.actionType)
+        val actionType = action.actionType
         when (actionType) {
             ActionType.ALARM -> handleAlarmAction(action.data?.data)
             ActionType.ANNOUNCEMENT -> handleAnnouncementAction(action.data?.data, handler)

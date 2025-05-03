@@ -1,70 +1,86 @@
 package com.example.rutinas.ui.edit.actions
 
-import android.app.Dialog
 import android.os.Bundle
-import androidx.appcompat.app.AlertDialog
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import androidx.viewbinding.ViewBinding
 import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.ActionType
 import com.example.rutinas.data.model.DataWrapper
 import com.example.rutinas.databinding.FragmentEditSoundModeActionBinding
+import com.example.rutinas.ui.edit.ActionDialogListener
 import timber.log.Timber
 
-class EditSoundModeActionDialogFragment : BaseEditActionDialogFragment() {
+class EditSoundModeActionDialogFragment(listener: ActionDialogListener) : BaseEditActionDialogFragment(listener) {
     private var _binding: FragmentEditSoundModeActionBinding? = null
     private val binding get() = _binding!!
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        super.onCreateDialog(savedInstanceState)
-        Timber.d("EditSoundModeActionDialogFragment: onCreateDialog() llamado")
-        _binding = FragmentEditSoundModeActionBinding.inflate(layoutInflater)
-        val dialog = AlertDialog.Builder(requireContext())
-            .setView(binding.root)
-            .setPositiveButton("Guardar") { _, _ -> saveAction() }
-            .setNegativeButton("Cancelar") { _, _ -> dismiss() }
-            .create()
-        loadActionData()
-        return dialog
+
+    companion object {
+        fun newInstance(action: Action, listener: ActionDialogListener): EditSoundModeActionDialogFragment {
+            return EditSoundModeActionDialogFragment(listener).apply {
+                arguments = newBundle(action)
+            }
+        }
     }
+
+    override fun inflateBinding(inflater: LayoutInflater, container: ViewGroup?): ViewBinding {
+        _binding = FragmentEditSoundModeActionBinding.inflate(inflater, container, false)
+        return binding
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        Timber.d("EditSoundModeActionDialogFragment: onViewCreated() llamado")
+        loadActionData()
+    }
+
     private fun loadActionData() {
         Timber.d("EditSoundModeActionDialogFragment: loadActionData() llamado")
         try {
-            action.data.let { dataWrapper ->
+            action.data?.let { dataWrapper ->
                 dataWrapper.data.let { data ->
-                    binding.etValue.setText(data["value"]?.toString() ?: "NORMAL")
+                    val value = data["value"] as? String ?: "NORMAL"
+                    when (value) {
+                        "NORMAL" -> binding.rbNormal.isChecked = true
+                        "SILENT" -> binding.rbSilent.isChecked = true
+                        "VIBRATE" -> binding.rbVibrate.isChecked = true
+                    }
                 }
             }
         } catch (e: Exception) {
             Timber.e("EditSoundModeActionDialogFragment: Error al cargar datos - ${e.message}")
         }
     }
-    private fun saveAction() {
+
+    override fun saveAction() {
         Timber.d("EditSoundModeActionDialogFragment: saveAction() llamado")
         try {
-            val value = binding.etValue.text.toString()
+            val value = when (binding.radioGroupSoundMode.checkedRadioButtonId) {
+                binding.rbNormal.id -> "NORMAL"
+                binding.rbSilent.id -> "SILENT"
+                binding.rbVibrate.id -> "VIBRATE"
+                else -> "NORMAL"
+            }
+
             val updatedAction = action.copy(
+                actionType = ActionType.SOUND_MODE,
                 data = DataWrapper(
                     mapOf(
                         "value" to value
                     )
                 )
             )
-            actionUpdateListener?.invoke(updatedAction)
+            notifyActionUpdated(updatedAction)
             Timber.d("EditSoundModeActionDialogFragment: Acción actualizada y notificada")
         } catch (e: Exception) {
             Timber.e("EditSoundModeActionDialogFragment: Error al guardar acción - ${e.message}")
         }
     }
+
     override fun onDestroyView() {
         Timber.d("EditSoundModeActionDialogFragment: onDestroyView() llamado")
         super.onDestroyView()
         _binding = null
-    }
-    companion object {
-        const val ARG_ACTION = "arg_action"
-        fun newInstance(action: Action): EditSoundModeActionDialogFragment {
-            return EditSoundModeActionDialogFragment().apply {
-                arguments = Bundle().apply {
-                    putParcelable(ARG_ACTION, action)
-                }
-            }
-        }
     }
 }

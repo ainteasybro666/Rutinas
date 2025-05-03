@@ -1,70 +1,89 @@
 package com.example.rutinas.ui.edit.actions
 
-import android.app.Dialog
 import android.os.Bundle
-import androidx.appcompat.app.AlertDialog
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import androidx.viewbinding.ViewBinding
 import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.ActionType
 import com.example.rutinas.data.model.DataWrapper
 import com.example.rutinas.databinding.FragmentEditTimeActionBinding
+import com.example.rutinas.ui.edit.ActionDialogListener
 import timber.log.Timber
 
-class EditTimeActionDialogFragment : BaseEditActionDialogFragment() {
+class EditTimeActionDialogFragment(listener: ActionDialogListener) :
+    BaseEditActionDialogFragment(listener) {
     private var _binding: FragmentEditTimeActionBinding? = null
     private val binding get() = _binding!!
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        super.onCreateDialog(savedInstanceState)
-        Timber.d("EditTimeActionDialogFragment: onCreateDialog() llamado")
-        _binding = FragmentEditTimeActionBinding.inflate(layoutInflater)
-        val dialog = AlertDialog.Builder(requireContext())
-            .setView(binding.root)
-            .setPositiveButton("Guardar") { _, _ -> saveAction() }
-            .setNegativeButton("Cancelar") { _, _ -> dismiss() }
-            .create()
-        loadActionData()
-        return dialog
+
+    companion object {
+        fun newInstance(
+            action: Action,
+            listener: ActionDialogListener
+        ): EditTimeActionDialogFragment {
+            return EditTimeActionDialogFragment(listener).apply {
+                arguments = newBundle(action)
+            }
+        }
     }
+
+    override fun inflateBinding(
+        inflater: LayoutInflater,
+        container: ViewGroup?
+    ): ViewBinding {
+        _binding = FragmentEditTimeActionBinding.inflate(inflater, container, false)
+        return binding
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        Timber.d("EditTimeActionDialogFragment: onViewCreated() llamado")
+        loadActionData()
+    }
+
     private fun loadActionData() {
         Timber.d("EditTimeActionDialogFragment: loadActionData() llamado")
         try {
-            action.data.let { dataWrapper ->
+            action.data?.let { dataWrapper ->
                 dataWrapper.data.let { data ->
-                    binding.etValue.setText(data["value"]?.toString() ?: "10")
+                    val value = data["value"] as? Long ?: 0
+                    val hours = (value / 3600).toInt()
+                    val minutes = ((value % 3600) / 60).toInt()
+                    binding.tpTime.hour = hours
+                    binding.tpTime.minute = minutes
                 }
             }
         } catch (e: Exception) {
             Timber.e("EditTimeActionDialogFragment: Error al cargar datos - ${e.message}")
         }
     }
-    private fun saveAction() {
+
+    override fun saveAction() {
         Timber.d("EditTimeActionDialogFragment: saveAction() llamado")
         try {
-            val value = binding.etValue.text.toString().toLong()
+            val hours = binding.tpTime.hour
+            val minutes = binding.tpTime.minute
+            val totalSeconds = hours * 3600 + minutes * 60
+
             val updatedAction = action.copy(
+                actionType = ActionType.TIME,
                 data = DataWrapper(
                     mapOf(
-                        "value" to value
+                        "value" to totalSeconds
                     )
                 )
             )
-            actionUpdateListener?.invoke(updatedAction)
+            notifyActionUpdated(updatedAction)
             Timber.d("EditTimeActionDialogFragment: Acción actualizada y notificada")
         } catch (e: Exception) {
             Timber.e("EditTimeActionDialogFragment: Error al guardar acción - ${e.message}")
         }
     }
+
     override fun onDestroyView() {
         Timber.d("EditTimeActionDialogFragment: onDestroyView() llamado")
         super.onDestroyView()
         _binding = null
-    }
-    companion object {
-        const val ARG_ACTION = "arg_action"
-        fun newInstance(action: Action): EditTimeActionDialogFragment {
-            return EditTimeActionDialogFragment().apply {
-                arguments = Bundle().apply {
-                    putParcelable(ARG_ACTION, action)
-                }
-            }
-        }
     }
 }

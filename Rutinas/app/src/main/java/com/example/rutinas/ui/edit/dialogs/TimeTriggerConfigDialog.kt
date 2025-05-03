@@ -20,10 +20,14 @@ class TimeTriggerConfigDialog : DialogFragment() {
     private val binding get() = _binding!!
     private var timeTriggerConfigListener: TimeTriggerConfigListener? = null
 
+    private var routineId: Long = 0
+
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         Timber.d("TimeTriggerConfigDialog: onCreateDialog() llamado")
         _binding = DialogTimeTriggerConfigBinding.inflate(LayoutInflater.from(context))
         setupUI()
+
+        routineId = arguments?.getLong("routineId") ?: 0
 
         return AlertDialog.Builder(requireContext())
             .setView(binding.root)
@@ -69,6 +73,7 @@ class TimeTriggerConfigDialog : DialogFragment() {
         }
 
         val trigger = Trigger(
+            routineId = routineId,
             triggerType = "TIME",
             data = DataWrapper(
                 mapOf(
@@ -93,8 +98,12 @@ class TimeTriggerConfigDialog : DialogFragment() {
     }
 
     companion object {
-        fun createInstance(): TimeTriggerConfigDialog {
-            return TimeTriggerConfigDialog()
+        fun createInstance(routineId: Long): TimeTriggerConfigDialog {
+            val dialog = TimeTriggerConfigDialog()
+            val args = Bundle()
+            args.putLong("routineId", routineId)
+            dialog.arguments = args
+            return dialog
         }
     }
 }

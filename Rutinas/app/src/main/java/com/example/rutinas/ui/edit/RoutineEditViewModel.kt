@@ -74,6 +74,14 @@ class RoutineEditViewModel @Inject constructor(
         }
     }
 
+    fun addAction(action: Action) {
+        Timber.d("Añadiendo nueva acción: $action")
+        val currentActions = _actions.value.toMutableList()
+        currentActions.add(action)
+        // Actualizar _actions con la nueva lista
+        _actions.value = currentActions.toList() // Convertir a lista inmutable
+        }
+
     fun saveRoutine(name: String, triggers: List<Trigger>, actions: List<Action>) {
         Timber.d("Guardando rutina con nombre: $name, triggers: $triggers, acciones: $actions")
         viewModelScope.launch {

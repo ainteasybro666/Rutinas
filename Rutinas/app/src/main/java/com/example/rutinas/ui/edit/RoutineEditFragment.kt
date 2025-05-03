@@ -43,6 +43,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
+import com.example.rutinas.ui.edit.dialogs.ActionSelectionDialog
 
 @AndroidEntryPoint
 class RoutineEditFragment : BaseFragment(),
@@ -50,15 +51,13 @@ class RoutineEditFragment : BaseFragment(),
     CalendarTriggerDialog.CalendarTriggerListener,
     LocationTriggerDialog.LocationTriggerListener,
     TimeTriggerConfigDialog.TimeTriggerConfigListener,
-    RoutineEditFragment.ActionDialogListener {
-
-    interface ActionDialogListener {
-        fun onActionUpdated(updatedAction: Action)
-    }
+    ActionSelectionDialog.ActionSelectionListener,
+    ActionDialogListener {
 
     @Inject
     lateinit var permissionManager: PermissionManager
     private val viewModel: RoutineEditViewModel by viewModels()
+    private var currentRoutineId: Long = 0
 
     // Variables para la gestión de triggers y acciones
     private val triggersList = mutableListOf<Trigger>()
@@ -74,6 +73,7 @@ class RoutineEditFragment : BaseFragment(),
 
     private val vb: FragmentRoutineEditBinding
         get() = binding as FragmentRoutineEditBinding
+
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -115,8 +115,9 @@ class RoutineEditFragment : BaseFragment(),
 
             btnAddAction.setOnClickListener {
                 if (canShowDialog()) {
-                    //showAddActionDialog()
-                    // Se deberia mostrar el ActionSelectionDialog
+                    val actionSelectionDialog = ActionSelectionDialog.newInstance()
+                    actionSelectionDialog.setActionSelectionListener(this@RoutineEditFragment)
+                    actionSelectionDialog.show(childFragmentManager, "ActionSelectionDialog")
                 }
             }
             btnSaveRoutine.setOnClickListener { saveRoutine() }
@@ -159,22 +160,29 @@ class RoutineEditFragment : BaseFragment(),
 
     private fun navigateToEditAction(action: Action) {
         val editFragment = getDialogFragmentForAction(action)
-
         editFragment.show(childFragmentManager, "EditActionDialog")
     }
 
     private fun getDialogFragmentForAction(action: Action): BaseEditActionDialogFragment {
-        return when (action.type) {
+        return when (action.actionType) {
             ActionType.ALARM -> EditAlarmActionDialogFragment.newInstance(action, this)
-            ActionType.ANNOUNCEMENT -> EditAnnouncementActionDialogFragment.newInstance(action, this)
+            ActionType.ANNOUNCEMENT -> EditAnnouncementActionDialogFragment.newInstance(
+                action,
+                this
+            )
+
             ActionType.BRIGHTNESS -> EditBrightnessActionDialogFragment.newInstance(action, this)
             ActionType.VOLUME -> EditVolumeActionDialogFragment.newInstance(action, this)
             ActionType.SOUND_MODE -> EditSoundModeActionDialogFragment.newInstance(action, this)
             ActionType.TIME -> EditTimeActionDialogFragment.newInstance(action, this)
-            ActionType.READ_NOTIFICATIONS -> EditReadNotificationsActionDialogFragment.newInstance(action, this)
+            ActionType.READ_NOTIFICATIONS -> EditReadNotificationsActionDialogFragment.newInstance(action,this)
             ActionType.PAUSE -> EditPauseActionDialogFragment.newInstance(action, this)
-            else -> throw IllegalArgumentException("Tipo de acción no soportado: ${action.type}")
         }
+    }
+
+    override fun onActionSelected(action: Action) {
+        Timber.d("Acción seleccionada: $action")
+        viewModel.addAction(action)
     }
 
     override fun onTriggerSelected(triggerType: TriggerTypeDialog.TriggerType) {
@@ -183,9 +191,9 @@ class RoutineEditFragment : BaseFragment(),
             return
         }
 
-        val timeDialog = TimeTriggerConfigDialog.createInstance()
-        val calendarDialog = CalendarTriggerDialog.createInstance()
-        val locationDialog = LocationTriggerDialog.createInstance()
+        val timeDialog = TimeTriggerConfigDialog.createInstance(currentRoutineId)
+        val calendarDialog = CalendarTriggerDialog.createInstance(currentRoutineId)
+        val locationDialog = LocationTriggerDialog.createInstance(currentRoutineId)
 
         when (triggerType) {
             TriggerTypeDialog.TriggerType.TIME -> {
@@ -230,6 +238,7 @@ class RoutineEditFragment : BaseFragment(),
                 viewModel.currentRoutine.collect { routine ->
                     Timber.d("Rutina cargada/actualizada: $routine")
                     routine?.let {
+                        currentRoutineId = it.id
                         vb.etRoutineName.setText(it.name)
                         triggersList.clear()
                         triggersList.addAll(it.triggers)
@@ -344,4 +353,5 @@ class RoutineEditFragment : BaseFragment(),
     override fun onActionUpdated(updatedAction: Action) {
         viewModel.updateAction(updatedAction)
     }
+
 }

@@ -1,12 +1,15 @@
 package com.example.rutinas.data.model
 
-import java.util.UUID
+import android.os.Parcelable
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import kotlinx.parcelize.Parcelize
+import java.util.UUID
 
+@Parcelize
 @Entity(
     tableName = "actions",
     foreignKeys = [
@@ -23,20 +26,20 @@ data class Action(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     var uuid: String = UUID.randomUUID().toString(),
-    val actionType: String,
+    val actionType: ActionType,
     val routineId: Long,
     @ColumnInfo(name = "data")
     val data: DataWrapper? = null,
     val executionOrder: Int,
     val pauseDuration: Long? = null
-) {
+) : Parcelable {
     fun getString(key: String): String? = data?.data?.get(key) as? String
     fun getInt(key: String): Int? = (data?.data?.get(key) as? Number)?.toInt()
     fun getBoolean(key: String): Boolean? = data?.data?.get(key) as? Boolean
 
     // Propiedades calculadas para la UI
     val title: String
-        get() = when (ActionType.fromString(actionType)) {
+        get() = when (actionType) {
             ActionType.ANNOUNCEMENT -> "Anuncio"
             ActionType.ALARM -> "Alarma"
             ActionType.READ_NOTIFICATIONS -> "Leer Notificaciones"
@@ -45,11 +48,10 @@ data class Action(
             ActionType.BRIGHTNESS -> "Ajustar Brillo"
             ActionType.SOUND_MODE -> "Modo de Sonido"
             ActionType.PAUSE -> "Pausa"
-            else -> "Sin título"
         }
 
     val description: String
-        get() = when (ActionType.fromString(actionType)) {
+        get() = when (actionType) {
             ActionType.ANNOUNCEMENT -> getString("message") ?: "Sin mensaje"
             ActionType.ALARM -> "Alarma: ${getString("time") ?: "No configurada"}"
             ActionType.READ_NOTIFICATIONS -> "Leer notificaciones activas"
@@ -68,7 +70,6 @@ data class Action(
                 else -> "Modo no especificado"
             }
             ActionType.PAUSE -> "Pausa: ${getInt("duration")} segundos"
-            else -> "Sin descripción"
         }
 
     companion object {
@@ -80,13 +81,10 @@ data class Action(
         ): Action {
             return Action(
                 routineId = routineId,
-                actionType = actionType.toString(),
+                actionType = actionType,
                 data = data,
                 executionOrder = executionOrder
-            ).apply {
-                // Genera nuevo UUID automáticamente
-                uuid = UUID.randomUUID().toString()
-            }
+            )
         }
     }
 }

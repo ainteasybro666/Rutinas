@@ -3,7 +3,6 @@ package com.example.rutinas.ui.edit.dialogs
 import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.view.ViewGroup
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.example.rutinas.data.model.DataWrapper
@@ -19,10 +18,12 @@ class LocationTriggerDialog : DialogFragment() {
     private var _binding: DialogLocationTriggerConfigBinding? = null
     private val binding get() = _binding!!
     private var locationTriggerListener: LocationTriggerListener? = null
+    private var routineId: Long = 0
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         Timber.d("LocationTriggerDialog: onCreateDialog() llamado")
         _binding = DialogLocationTriggerConfigBinding.inflate(LayoutInflater.from(context))
+        routineId = arguments?.getLong("routineId") ?: 0
 
         return AlertDialog.Builder(requireContext())
             .setView(binding.root)
@@ -37,6 +38,7 @@ class LocationTriggerDialog : DialogFragment() {
         val longitude = binding.etLongitude.text.toString().toDoubleOrNull() ?: 0.0
 
         val trigger = Trigger(
+            routineId = routineId,
             triggerType = "LOCATION",
             data = DataWrapper(
                 mapOf(
@@ -58,8 +60,12 @@ class LocationTriggerDialog : DialogFragment() {
     }
 
     companion object {
-        fun createInstance(): LocationTriggerDialog {
-            return LocationTriggerDialog()
+        fun createInstance(routineId: Long): LocationTriggerDialog {
+            val dialog = LocationTriggerDialog()
+            val args = Bundle()
+            args.putLong("routineId", routineId)
+            dialog.arguments = args
+            return dialog
         }
     }
 }

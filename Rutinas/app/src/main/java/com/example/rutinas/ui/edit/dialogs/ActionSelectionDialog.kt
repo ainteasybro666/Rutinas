@@ -3,6 +3,8 @@ package com.example.rutinas.ui.edit.dialogs
 import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.example.rutinas.R
@@ -21,15 +23,17 @@ class ActionSelectionDialog : DialogFragment() {
     private val binding get() = _binding!!
     private var actionSelectionListener: ActionSelectionListener? = null
 
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        Timber.d("ActionSelectionDialog: onCreateDialog() llamado")
-        _binding = DialogActionSelectionBinding.inflate(LayoutInflater.from(context))
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        _binding = DialogActionSelectionBinding.inflate(inflater, container, false)
+        return binding.root
+    }
 
-        val builder = AlertDialog.Builder(requireContext()).apply {
-            setView(binding.root)
-            setNegativeButton(R.string.cancel) { _, _ -> dismiss() }
-        }
-
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
         binding.btnSelectAction.setOnClickListener {
             val selectedActionType = when (binding.rgActionTypes.checkedRadioButtonId) {
                 binding.rbAlarm.id -> ActionType.ALARM
@@ -44,15 +48,26 @@ class ActionSelectionDialog : DialogFragment() {
             }
 
             selectedActionType?.let {
-                val action = Action(type = it, data = DataWrapper(emptyMap()))
+                val action = Action.createAction(
+                    routineId = 0, // Asegúrate de que este ID sea correcto
+                    actionType = it,
+                    executionOrder = 0, // Asegúrate de que este orden sea correcto
+                    data = DataWrapper(emptyMap())
+                )
                 actionSelectionListener?.onActionSelected(action)
             }
-
             dismiss()
+        }
+    }
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        Timber.d("ActionSelectionDialog: onCreateDialog() llamado")
+        val builder = AlertDialog.Builder(requireContext()).apply {
+            setView(binding.root)
+            setNegativeButton(R.string.cancel) { _, _ -> dismiss() }
         }
         return builder.create()
     }
-
 
     fun setActionSelectionListener(listener: ActionSelectionListener) {
         this.actionSelectionListener = listener

@@ -18,7 +18,8 @@ class TriggerTypeDialog : DialogFragment() {
     }
 
     private var listener: TriggerTypeListener? = null
-    private lateinit var binding: DialogTriggerTypesBinding
+    private var _binding: DialogTriggerTypesBinding? = null
+    private val binding get() = _binding!!
 
     fun setTriggerTypeListener(listener: TriggerTypeListener) {
         this.listener = listener
@@ -29,21 +30,15 @@ class TriggerTypeDialog : DialogFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        binding = DialogTriggerTypesBinding.inflate(inflater, container, false)
+        _binding = DialogTriggerTypesBinding.inflate(inflater, container, false)
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        setupUI()
-    }
-
-    private fun setupUI() {
-        with(binding) {
-            btnTimeTrigger.setOnClickListener { selectTrigger(TriggerType.TIME) }
-            btnCalendarTrigger.setOnClickListener { selectTrigger(TriggerType.CALENDAR) }
-            btnLocationTrigger.setOnClickListener { selectTrigger(TriggerType.LOCATION) }
-        }
+        binding.btnTimeTrigger.setOnClickListener { selectTrigger(TriggerType.TIME) }
+        binding.btnCalendarTrigger.setOnClickListener { selectTrigger(TriggerType.CALENDAR) }
+        binding.btnLocationTrigger.setOnClickListener { selectTrigger(TriggerType.LOCATION) }
     }
 
     override fun onAttach(context: Context) {
@@ -58,6 +53,11 @@ class TriggerTypeDialog : DialogFragment() {
         } else {
             Timber.e("No se puede seleccionar trigger: Diálogo no adjunto")
         }
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
     }
 
     enum class TriggerType {

@@ -1,4 +1,4 @@
-package com.example.rutinas.util
+package com.example.rutinas.utils
 
 import android.app.Notification
 import android.content.Context

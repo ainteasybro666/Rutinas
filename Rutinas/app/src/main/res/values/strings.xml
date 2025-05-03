@@ -19,4 +19,6 @@
     <string name="alarm_volume">Volumen de alarma</string>
     <string name="ringtone_volume">Volumen de tono</string>
     <string name="drag_handle_desc">botón para draggear</string>
+    <string name="cancel">Cancelar</string>
+
 </resources>

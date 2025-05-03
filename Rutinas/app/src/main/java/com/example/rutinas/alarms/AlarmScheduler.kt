@@ -32,9 +32,14 @@ class AlarmScheduler @Inject constructor(
     }
 
     private fun scheduleTimeTrigger(routine: Routine, trigger: Trigger) {
-        val hour = trigger.data.data["hour"] as? Int
-        val minute = trigger.data.data["minute"] as? Int
-        val frequency = trigger.data.data["frequency"] as? String ?: "daily"
+        //Comprobamos que el dataWrapper no sea nulo.
+        val dataWrapper = trigger.data ?: return
+        //Comprobamos que el mapa no sea nulo
+        val mapData = dataWrapper.data ?: return
+
+        val hour = mapData["hour"] as? Int
+        val minute = mapData["minute"] as? Int
+        val frequency = mapData["frequency"] as? String ?: "daily"
 
         if (hour == null || minute == null) {
             throw IllegalArgumentException("Hour and minute must be specified for time triggers.")
@@ -50,8 +55,8 @@ class AlarmScheduler @Inject constructor(
             when (frequency) {
                 "daily" -> if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_MONTH, 1)
                 "weekly" -> {
-                    val daysOfWeek = trigger.data.data["daysOfWeek"] as? List<Int>
-                    if (daysOfWeek.isNullOrEmpty()) return
+                    val daysOfWeek = mapData["daysOfWeek"] as? List<Int>
+                    if (daysOfWeek.isNullOrEmpty()) return@apply
                     while (timeInMillis <= System.currentTimeMillis() ||
                         !daysOfWeek.contains(get(Calendar.DAY_OF_WEEK) - 1)
                     ) {
@@ -64,18 +69,16 @@ class AlarmScheduler @Inject constructor(
             // Segundo: ajustes adicionales según frecuencia
             when (frequency) {
                 "weekly" -> {
-                    val daysOfWeek = trigger.data.data["daysOfWeek"] as? List<Int> ?: return
-                    val target = (daysOfWeek.minOrNull() ?: return) + 1
+                    val daysOfWeek = mapData["daysOfWeek"] as? List<Int> ?: return@apply
+                    val target = (daysOfWeek.minOrNull() ?: return@apply) + 1
                     while (get(Calendar.DAY_OF_WEEK) != target) add(Calendar.DAY_OF_WEEK, 1)
                 }
                 "monthly" -> {
-                    val dayOfMonth = (trigger.data.data["dayOfMonth"] as? Number)?.toInt() ?: 1
+                    val dayOfMonth = (mapData["dayOfMonth"] as? Number)?.toInt() ?: 1
                     set(Calendar.DAY_OF_MONTH, dayOfMonth)
                     if (get(Calendar.DAY_OF_MONTH) != dayOfMonth) {
                         set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
                     }
-                }
-                else -> {
                 }
             }
         }

@@ -1,78 +1,63 @@
 package com.example.rutinas.ui.edit.actions
 
-import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
-import androidx.appcompat.app.AlertDialog
-import androidx.fragment.app.DialogFragment
+import androidx.viewbinding.ViewBinding
 import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.ActionType
 import com.example.rutinas.data.model.DataWrapper
 import com.example.rutinas.databinding.FragmentEditAlarmActionBinding
 import com.example.rutinas.ui.edit.RoutineEditFragment
+import com.example.rutinas.ui.edit.ActionDialogListener
 import timber.log.Timber
 
-class EditAlarmActionDialogFragment : BaseEditActionDialogFragment() {
+class EditAlarmActionDialogFragment(listener: ActionDialogListener) : BaseEditActionDialogFragment(listener) {
     private var _binding: FragmentEditAlarmActionBinding? = null
     private val binding get() = _binding!!
 
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        super.onCreateDialog(savedInstanceState)
-        Timber.d("EditAlarmActionDialogFragment: onCreateDialog() llamado")
-        _binding = FragmentEditAlarmActionBinding.inflate(layoutInflater)
+    companion object {
+        const val ARG_ACTION = "arg_action"
 
-        setupUI()
-
-        val dialog = AlertDialog.Builder(requireContext())
-            .setView(binding.root)
-            .setPositiveButton("Guardar") { _, _ -> saveAction() }
-            .setNegativeButton("Cancelar") { _, _ -> dismiss() }
-            .create()
-
-        loadActionData()
-        return dialog
-    }
-
-    private fun setupUI() {
-        Timber.d("EditAlarmActionDialogFragment: setupUI() llamado")
-        with(binding) {
-            // Configurar el adaptador del Spinner
-            val durations = listOf("10 segundos", "30 segundos", "1 minuto", "2 minutos", "5 minutos")
-            spinnerDuration.adapter = ArrayAdapter(
-                requireContext(),
-                android.R.layout.simple_spinner_dropdown_item,
-                durations
-            )
-
-
-            // Configurar el switch de repetir
-            switchRepeat.setOnCheckedChangeListener { _, isChecked ->
-                Timber.d("EditAlarmActionDialogFragment: Switch Repetir cambiado a $isChecked")
-                repeatOptionsGroup.visibility = if (isChecked) View.VISIBLE else View.GONE
+        fun newInstance(
+            action: Action,
+            listener: ActionDialogListener
+        ): EditAlarmActionDialogFragment {
+            return EditAlarmActionDialogFragment(listener).apply {
             }
         }
+    }
+
+    override fun inflateBinding(inflater: LayoutInflater, container: ViewGroup?): ViewBinding {
+        _binding = FragmentEditAlarmActionBinding.inflate(inflater, container, false)
+        return binding
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        Timber.d("EditAlarmActionDialogFragment: onViewCreated() llamado")
+        loadActionData()
     }
 
     private fun loadActionData() {
         Timber.d("EditAlarmActionDialogFragment: loadActionData() llamado")
         try {
-            action.data.let { dataWrapper ->
+            action.data?.let { dataWrapper ->
                 dataWrapper.data.let { data ->
-                    val duration = (data["duration"] as? Int) ?: 30 // Valor predeterminado si es nulo
-                    val repeatEnabled = (data["repeatEnabled"] as? Boolean) ?: false // Valor predeterminado si es nulo
+                    val hour = (data["hour"] as? Int) ?: 0
+                    val minute = (data["minute"] as? Int) ?: 0
+                    val label = data["label"] as? String ?: ""
+                    val duration = data["duration"] as? String ?: ""
+                    val repetitions = data["repetitions"] as? String ?: ""
 
-                    Timber.d("EditAlarmActionDialogFragment: Datos cargados - duración: $duration, repetir: $repeatEnabled")
+                    Timber.d("EditAlarmActionDialogFragment: Datos cargados - hora: $hour:$minute, etiqueta: $label, duracion: $duration, repeticiones: $repetitions")
 
-                    val durationValues = listOf(10, 30, 60, 120, 300) // Lista de valores de duración
-                    val durationIndex = durationValues.indexOf(duration).takeIf { it != -1 } ?: 1 // Obtener el índice del valor o usar 1 si no se encuentra
-
-                    binding.spinnerDuration.setSelection(durationIndex) // Establecer la selección del Spinner
-
-                    binding.switchRepeat.isChecked = repeatEnabled
-                    binding.repeatOptionsGroup.visibility = if (repeatEnabled) View.VISIBLE else View.GONE
+                    binding.timePicker.hour = hour
+                    binding.timePicker.minute = minute
+                    binding.etLabel.setText(label)
+                    binding.etDuration.setText(duration)
+                    binding.etRepetitions.setText(repetitions)
                 }
             }
         } catch (e: Exception) {
@@ -80,25 +65,30 @@ class EditAlarmActionDialogFragment : BaseEditActionDialogFragment() {
         }
     }
 
-    private fun saveAction() {
+    override fun saveAction() {
         Timber.d("EditAlarmActionDialogFragment: saveAction() llamado")
         try {
-            val durationValues = listOf(10, 30, 60, 120, 300)
-            val durationIndex = binding.spinnerDuration.selectedItemPosition
-            val duration = durationValues[durationIndex]
-            val repeatEnabled = binding.switchRepeat.isChecked
+            val hour = binding.timePicker.hour
+            val minute = binding.timePicker.minute
+            val label = binding.etLabel.text.toString()
+            val duration = binding.etDuration.text.toString()
+            val repetitions = binding.etRepetitions.text.toString()
 
-            Timber.d("EditAlarmActionDialogFragment: Guardando - duración: $duration, repetir: $repeatEnabled")
+            Timber.d("EditAlarmActionDialogFragment: Guardando - hora: $hour:$minute, etiqueta: $label, duracion: $duration, repeticiones: $repetitions")
 
             val updatedAction = action.copy(
+                actionType = ActionType.ALARM,
                 data = DataWrapper(
                     mapOf(
+                        "hour" to hour,
+                        "minute" to minute,
+                        "label" to label,
                         "duration" to duration,
-                        "repeatEnabled" to repeatEnabled
+                        "repetitions" to repetitions
                     )
                 )
             )
-            actionUpdateListener?.invoke(updatedAction)
+            notifyActionUpdated(updatedAction)
             Timber.d("EditAlarmActionDialogFragment: Acción actualizada y notificada")
         } catch (e: Exception) {
             Timber.e("EditAlarmActionDialogFragment: Error al guardar acción - ${e.message}")
@@ -109,19 +99,5 @@ class EditAlarmActionDialogFragment : BaseEditActionDialogFragment() {
         Timber.d("EditAlarmActionDialogFragment: onDestroyView() llamado")
         super.onDestroyView()
         _binding = null
-    }
-
-    companion object {
-        const val ARG_ACTION = "arg_action"
-
-        fun newInstance(
-            action: Action
-        ): EditAlarmActionDialogFragment {
-            return EditAlarmActionDialogFragment().apply {
-                arguments = Bundle().apply {
-                    putParcelable(ARG_ACTION, action)
-                }
-            }
-        }
     }
 }
