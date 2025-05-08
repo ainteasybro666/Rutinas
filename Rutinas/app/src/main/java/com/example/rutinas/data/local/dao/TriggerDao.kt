@@ -15,6 +15,9 @@ interface TriggerDao {
     @Query("SELECT * FROM triggers WHERE routineId = :routineId")
     suspend fun getTriggersForRoutine(routineId: Long): List<Trigger>
 
+    @Query("DELETE FROM triggers WHERE routineId = :routineId")
+    suspend fun deleteTriggersForRoutine(routineId: Long)
+
     @Insert
     suspend fun insert(trigger: Trigger)
 

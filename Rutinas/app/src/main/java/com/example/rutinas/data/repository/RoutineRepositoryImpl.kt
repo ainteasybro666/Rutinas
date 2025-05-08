@@ -1,192 +1,182 @@
 package com.example.rutinas.data.repository
 
-import androidx.room.withTransaction
-import com.example.rutinas.data.local.AppDatabase
 import com.example.rutinas.data.local.dao.ActionDao
 import com.example.rutinas.data.local.dao.RoutineDao
 import com.example.rutinas.data.local.dao.TriggerDao
-import com.example.rutinas.data.model.Action
-import com.example.rutinas.data.model.RoutineEntity
-import com.example.rutinas.data.model.Trigger
-import com.example.rutinas.domain.Routine
-import com.example.rutinas.utils.Resource
-import kotlinx.coroutines.Dispatchers
+import com.example.rutinas.data.local.AppDatabase // Importa AppDatabase para RoutineWithRelations
+import com.example.rutinas.data.model.RoutineEntity // Importa RoutineEntity
+import com.example.rutinas.data.model.Action // Importa Action (es una entidad y modelo)
+import com.example.rutinas.data.model.Trigger // Importa Trigger (es una entidad y modelo)
+import com.example.rutinas.domain.Routine // Importa tu modelo de dominio Routine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.withContext
 import timber.log.Timber
-import java.time.LocalDateTime
-import java.util.UUID
-import javax.inject.Inject
 
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
 class RoutineRepositoryImpl @Inject constructor(
-    private val db: AppDatabase
+    private val routineDao: RoutineDao,
+    private val actionDao: ActionDao,
+    private val triggerDao: TriggerDao
+    // Otros DAOs si los tienes
 ) : RoutineRepository {
 
-    private val routineDao: RoutineDao = db.routineDao()
-    private val triggerDao: TriggerDao = db.triggerDao()
-    private val actionDao: ActionDao = db.actionDao()
-
     override fun getAllRoutines(): Flow<List<Routine>> {
-        return routineDao.getRoutinesWithRelations()
-            .map { routinesWithRelations ->
-                routinesWithRelations.map { it.toDomainModel() }
-            }
-    }
-
-    override suspend fun saveRoutine(routine: Routine): Resource<Long> = withContext(Dispatchers.IO) {
-        try {
-            db.withTransaction {
-                val routineId = if (routine.id == 0L) {
-                    insertNewRoutine(routine)
-                } else {
-                    updateExistingRoutine(routine)
-                }
-                syncTriggers(routineId, routine.triggers)
-                syncActions(routineId, routine.actions)
-                Resource.Success(routineId)
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "Error saving routine")
-            Resource.Error(e.localizedMessage ?: "Unknown error")
-        }
-    }
-
-    private suspend fun insertNewRoutine(routine: Routine): Long {
-        val routineEntity = RoutineEntity(
-            uuid = UUID.randomUUID().toString(),
-            name = routine.name,
-            description = routine.description,
-            isEnabled = routine.isEnabled,
-            createdDate = routine.createdDate
-        )
-        return routineDao.insertRoutine(routineEntity)
-    }
-
-    private suspend fun updateExistingRoutine(routine: Routine): Long {
-        routineDao.update(
-            RoutineEntity(
-                id = routine.id,
-                uuid = routine.uuid,
-                name = routine.name,
-                description = routine.description,
-                isEnabled = routine.isEnabled,
-                createdDate = routine.createdDate
-            )
-        )
-        return routine.id
-    }
-
-    private suspend fun syncTriggers(routineId: Long, triggers: List<Trigger>) {
-        val currentTriggers = triggerDao.getTriggersForRoutine(routineId)
-        // Eliminar triggers removidos
-        currentTriggers.filter { current ->
-            triggers.none { it.uuid == current.uuid }
-        }.forEach { triggerDao.delete(it) }
-
-        // Insertar/Actualizar triggers
-        val triggersToSave = mutableListOf<Trigger>()
-        triggers.forEach { trigger ->
-            triggersToSave.add(trigger.copy(routineId = routineId))
-        }
-        // Guardar los triggers
-        triggersToSave.forEach { triggerToSave ->
-            if (triggerToSave.id == 0L) {
-                triggerDao.insert(triggerToSave.copy(uuid = UUID.randomUUID().toString()))
-            } else {
-                triggerDao.update(triggerToSave)
-            }
-        }
-    }
-
-    private suspend fun syncActions(routineId: Long, actions: List<Action>) {
-        val currentActions = actionDao.getActionsForRoutine(routineId)
-        // Eliminar acciones removidas
-        currentActions.filter { current ->
-            actions.none { it.uuid == current.uuid }
-        }.forEach { actionDao.delete(it) }
-
-        // Insertar/Actualizar acciones
-        actions.forEachIndexed { index, action ->
-            val actionToSave = action.copy(routineId = routineId, executionOrder = index)
-            if (action.id == 0L) {
-                actionDao.insert(actionToSave.copy(uuid = UUID.randomUUID().toString()))
-            } else {
-                actionDao.update(actionToSave)
-            }
+        Timber.d("Repository: Getting all routines with relations")
+        return routineDao.getRoutinesWithRelations().map { list ->
+            // Mapea la lista de RoutineWithRelations a una lista de modelos de dominio Routine
+            list.map { it.toRoutineDomain() } // Usa una función de mapeo interna o de extensión
         }
     }
 
     override suspend fun updateRoutineStatus(routineId: Long, isEnabled: Boolean) {
-        withContext(Dispatchers.IO) {
-            routineDao.updateEnabledStatus(routineId, isEnabled)
-        }
+        Timber.d("Repository: Updating routine status for ID: $routineId to $isEnabled")
+        routineDao.updateEnabledStatus(routineId, isEnabled)
+        Timber.d("Repository: Routine status updated for ID: $routineId")
     }
 
-    override suspend fun insertRoutine(routine: Routine) {
-        saveRoutine(routine)
+    override suspend fun insertRoutine(routine: Routine): Long {
+        Timber.d("Repository: Inserting routine: ${routine.name}")
+
+        // Mapea el modelo de dominio Routine a RoutineEntity para insertar la entidad principal
+        val routineId = routineDao.insertRoutine(routine.toRoutineEntity())
+        Timber.d("Repository: Routine inserted with ID: $routineId")
+
+        // Inserta los triggers asociados a la nueva rutina
+        // Asegúrate de asignar el routineId recién generado a los triggers antes de insertarlos
+        val triggersToInsert = routine.triggers.map { it.copy(routineId = routineId) }
+        triggersToInsert.forEach { triggerDao.insertTrigger(it) } // Usa el método insertTrigger del DAO
+
+        // Inserta las acciones asociadas a la nueva rutina
+        // Asegúrate de asignar el routineId recién generado a las acciones antes de insertarlas
+        val actionsToInsert = routine.actions.map { it.copy(routineId = routineId) }
+        actionsToInsert.forEach { actionDao.insert(it) } // Usa el método insert del DAO
+
+        Timber.d("Repository: Triggers and actions inserted for routine ID: $routineId")
+        return routineId // Devuelve el ID de la rutina insertada
     }
 
     override suspend fun updateActions(actions: List<Action>) {
-        db.withTransaction {
-            // No es necesario llamar a updateAll, ya que syncActions maneja las actualizaciones
+        Timber.d("Repository: Updating a list of actions (${actions.size}) individually")
+        // Itera sobre la lista y actualiza cada Action usando el mé-to-do update del DAO
+        actions.forEach { action ->
+            actionDao.update(action)
         }
+        Timber.d("Repository: List of actions updated individually")
     }
 
+
     override suspend fun getRoutineByUuid(uuid: String): Routine? {
-        return routineDao.getRoutineByUuid(uuid)?.let { routineEntity ->
-            val triggers = triggerDao.getTriggersForRoutine(routineEntity.id)
-            val actions = actionDao.getActionsForRoutine(routineEntity.id)
-            routineEntity.toDomainModel(triggers, actions)
+        Timber.d("Repository: Getting routine by UUID: $uuid")
+        // Obtiene la rutina por UUID, si existe
+        val routineEntity = routineDao.getRoutineByUuid(uuid)
+
+        // Si se encontró la rutina, carga sus triggers y actions por routineId
+        return routineEntity?.let { entity ->
+            val triggers = triggerDao.getTriggersForRoutine(entity.id)
+            val actions = actionDao.getActionsForRoutine(entity.id)
+
+            // Mapea RoutineEntity, triggers y actions a tu modelo de dominio Routine
+            entity.toRoutineDomain(triggers, actions)
+        } ?: run {
+            Timber.d("Repository: Routine with UUID: $uuid not found")
+            null // Si la rutina no se encontró, devuelve null
         }
     }
 
     override suspend fun updateActionsOrder(actions: List<Action>) {
-        db.withTransaction {
-            actions.forEachIndexed { index, action ->
-                actionDao.updateActionOrder(action.uuid, index)
-            }
+        Timber.d("Repository: Updating actions order for ${actions.size} actions")
+        // Itera sobre la lista y actualiza el orden de cada acción usando el DAO
+        actions.forEach { action ->
+            actionDao.updateActionOrder(action.uuid, action.executionOrder)
         }
+        Timber.d("Repository: Actions order updated")
     }
 
-    // Nuevos métodos para actualizar acciones individualmente y eliminar
     override suspend fun updateAction(action: Action) {
-        withContext(Dispatchers.IO) {
-            actionDao.update(action)
-        }
+        Timber.d("Repository: Updating action with UUID: ${action.uuid}")
+        actionDao.update(action) // Usa el método update del ActionDao para una sola acción
+        Timber.d("Repository: Action updated with UUID: ${action.uuid}")
     }
 
     override suspend fun deleteAction(action: Action) {
-        withContext(Dispatchers.IO) {
-            actionDao.delete(action)
-        }
+        Timber.d("Repository: Deleting action with UUID: ${action.uuid}")
+        actionDao.delete(action) // Usa el método delete del ActionDao para una sola acción
+        Timber.d("Repository: Action deleted with UUID: ${action.uuid}")
     }
 
-    // Extension functions para conversión de modelos
-    private fun AppDatabase.RoutineWithRelations.toDomainModel() = Routine(
-        id = routine.id,
-        uuid = routine.uuid,
-        name = routine.name,
-        description = routine.description,
-        isEnabled = routine.isEnabled,
-        createdDate = routine.createdDate,
-        triggers = triggers,
-        actions = actions.sortedBy { it.executionOrder }
+    // Implementación de updateRoutine
+    override suspend fun updateRoutine(routine: Routine) {
+        Timber.d("Repository: Updating routine: ${routine.name} with ID: ${routine.id}")
+
+        // Actualiza la entidad Routine principal
+        routineDao.update(routine.toRoutineEntity())
+        Timber.d("Repository: Main routine entity updated")
+
+        // --- Lógica de actualización de Triggers y Actions (Eliminar y Re-insertar) ---
+        // 1. Elimina todos los triggers y acciones existentes asociados a esta rutina
+        //    Usando los métodos delete...ForRoutine que añadimos a los DAOs.
+        triggerDao.deleteTriggersForRoutine(routine.id)
+        actionDao.deleteActionsForRoutine(routine.id)
+        Timber.d("Repository: Deleted old triggers and actions for routine ID: ${routine.id}")
+
+
+        // 2. Inserta los triggers y acciones actualizados desde el modelo de dominio Routine
+        //    Asegúrate de que tienen el routineId correcto (ya lo tienen en el modelo Routine)
+        routine.triggers.forEach { triggerDao.insertTrigger(it) }
+        routine.actions.forEach { actionDao.insert(it) }
+        Timber.d("Repository: Inserted updated triggers and actions for routine ID: ${routine.id}")
+
+        Timber.d("Repository: Routine, triggers, and actions updated for ID: ${routine.id}")
+    }
+
+    // Implementa otras funciones de la interfaz RoutineRepository si hay más.
+
+}
+
+// --- Funciones de Mapeo ---
+// Estas funciones convierten entre tus entidades de Room (RoutineEntity, RoutineWithRelations)
+// y tu modelo de dominio (Routine). Puedes colocarlas aquí o en un archivo de extensiones.
+
+// Mapeo de RoutineWithRelations a tu modelo de dominio Routine
+fun AppDatabase.RoutineWithRelations.toRoutineDomain(): Routine {
+    return Routine(
+        id = this.routine.id,
+        uuid = this.routine.uuid,
+        name = this.routine.name,
+        description = this.routine.description,
+        isEnabled = this.routine.isEnabled,
+        createdDate = this.routine.createdDate,
+        triggers = this.triggers, // Usa las listas de la relación
+        actions = this.actions // Usa las listas de la relación
     )
+}
 
-    private fun RoutineEntity.toDomainModel(
-        triggers: List<Trigger>,
-        actions: List<Action>
-    ): Routine {
-        return Routine(
-            id = this.id,
-            uuid = this.uuid,
-            name = this.name,
-            description = this.description,
-            isEnabled = this.isEnabled,
-            createdDate = this.createdDate,
-            triggers = triggers,
-            actions = actions.sortedBy { it.executionOrder }
-        )
-    }
+// Mapeo de tu modelo de dominio Routine a RoutineEntity (para guardar la entidad principal)
+fun Routine.toRoutineEntity(): RoutineEntity {
+    return RoutineEntity(
+        id = this.id, // Room usará 0 para entidades nuevas con primary key autogenerada
+        uuid = this.uuid,
+        name = this.name,
+        description = this.description,
+        isEnabled = this.isEnabled,
+        createdDate = this.createdDate
+    )
+}
+
+// Mapeo de RoutineEntity (cuando se carga individualmente) a tu modelo de dominio Routine
+// Este se usa cuando no cargas las relaciones automáticamente (ej: getRoutineByUuid)
+fun RoutineEntity.toRoutineDomain(triggers: List<Trigger> = emptyList(), actions: List<Action> = emptyList()): Routine {
+    return Routine(
+        id = this.id,
+        uuid = this.uuid,
+        name = this.name,
+        description = this.description,
+        isEnabled = this.isEnabled,
+        createdDate = this.createdDate,
+        triggers = triggers, // Añade las listas cargadas por separado
+        actions = actions // Añade las listas cargadas por separado
+    )
 }

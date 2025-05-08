@@ -25,6 +25,10 @@ class EditAlarmActionDialogFragment(listener: ActionDialogListener) : BaseEditAc
             listener: ActionDialogListener
         ): EditAlarmActionDialogFragment {
             return EditAlarmActionDialogFragment(listener).apply {
+                // Set the action as arguments for the fragment
+                arguments = Bundle().apply {
+                    putParcelable(ARG_ACTION, action)
+                }
             }
         }
     }
@@ -43,6 +47,16 @@ class EditAlarmActionDialogFragment(listener: ActionDialogListener) : BaseEditAc
     private fun loadActionData() {
         Timber.d("EditAlarmActionDialogFragment: loadActionData() llamado")
         try {
+            // Get the action from arguments
+            val action = arguments?.getSerializable(ARG_ACTION) as? Action
+            if (action == null) {
+                Timber.e("EditAlarmActionDialogFragment: Error al obtener la acción de los argumentos.")
+                // Handle the case where action is not found in arguments, maybe close the dialog
+                dismiss()
+                return
+            }
+            this.action = action // Assign the action to the fragment's property
+
             action.data?.let { dataWrapper ->
                 dataWrapper.data.let { data ->
                     val hour = (data["hour"] as? Int) ?: 0
@@ -62,6 +76,8 @@ class EditAlarmActionDialogFragment(listener: ActionDialogListener) : BaseEditAc
             }
         } catch (e: Exception) {
             Timber.e("EditAlarmActionDialogFragment: Error al cargar datos - ${e.message}")
+            // Handle other potential errors during data loading
+            dismiss()
         }
     }
 

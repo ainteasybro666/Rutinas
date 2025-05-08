@@ -9,8 +9,8 @@ java/
                 data/
                     local/
                         AppDatabase.kt
-                        Converters.kt
                         FrequencyTypeConverter.kt
+                        LocalDateTimeConverter.kt
                         dao/
                             ActionDao.kt
                             RoutineDao.kt
@@ -18,6 +18,9 @@ java/
                     model/
                         Action.kt
                         ActionType.kt
+                        ActionUi.kt
+                        DataWrapper.kt
+                        DataWrapperTypeConverter.kt
                         FrequencyType.kt
                         RoutineEntity.kt
                         Trigger.kt
@@ -39,24 +42,25 @@ java/
                         BaseActivity.kt
                         BaseFragment.kt
                     edit/
+                        ActionDialogListener.kt
                         RoutineEditFragment.kt
                         RoutineEditViewModel.kt
                         actions/
                             ActionEditorDialog.kt
+                            AppInfo.kt
                             BaseEditActionDialogFragment.kt
                             EditAlarmActionDialogFragment.kt
                             EditAnnouncementActionDialogFragment.kt
                             EditBrightnessActionDialogFragment.kt
+                            EditPauseActionDialogFragment.kt
                             EditReadNotificationsActionDialogFragment.kt
                             EditSoundModeActionDialogFragment.kt
                             EditTimeActionDialogFragment.kt
                             EditVolumeActionDialogFragment.kt
                         dialogs/
                             ActionSelectionDialog.kt
-                            AddActionDialogFragment.kt
                             BaseDialog.kt
                             CalendarTriggerDialog.kt
-                            EditActionDialog.kt
                             LocationTriggerDialog.kt
                             TimeTriggerConfigDialog.kt
                             TriggerTypeDialog.kt
@@ -65,6 +69,7 @@ java/
                         adapter/
                             ActionAdapter.kt
                             ActionCategoriesAdapter.kt
+                            AppInfoAdapter.kt
                             RoutineAdapter.kt
                             TriggerAdapter.kt
                         fragments/
@@ -109,6 +114,7 @@ res/
         ic_location.xml
         ic_notification.xml
         ic_notifications.xml
+        ic_pause.xml
         ic_routine.xml
         ic_sound_mode.xml
         ic_status.xml
@@ -118,15 +124,15 @@ res/
         activity_main.xml
         dialog_action_selection.xml
         dialog_add_action.xml
-        dialog_calendar_trigger.xml
-        dialog_edit_action.xml
-        dialog_location_trigger.xml
+        dialog_base.xml
+        dialog_calendar_trigger_config.xml
+        dialog_location_trigger_config.xml
         dialog_time_trigger_config.xml
         dialog_trigger_types.xml
-        fragment_action_categories.xml
         fragment_edit_alarm_action.xml
         fragment_edit_announcement_action.xml
         fragment_edit_brightness_action.xml
+        fragment_edit_pause_action.xml
         fragment_edit_read_notifications_action.xml
         fragment_edit_sound_mode_action.xml
         fragment_edit_time_action.xml
@@ -137,6 +143,7 @@ res/
         item_action.xml
         item_action_category_child.xml
         item_action_category_group.xml
+        item_app_info.xml
         item_category.xml
         item_routine.xml
         item_trigger.xml

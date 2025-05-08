@@ -56,8 +56,9 @@ class ActionAdapter(
         val newList = currentList.toMutableList().apply {
             add(to, removeAt(from))
         }
-        submitList(newList)
-        viewModel.updateActions(newList.mapIndexed { index, action ->
+        submitList(newList) // Update adapter's list
+        // Notify ViewModel about the reordered list
+        viewModel.onActionListReordered(newList.mapIndexed { index, action ->
             action.copy(executionOrder = index)
         })
     }
@@ -76,7 +77,7 @@ class ActionAdapter(
     }
 
     class ActionDiffCallback : DiffUtil.ItemCallback<Action>() {
-        override fun areItemsTheSame(oldItem: Action, newItem: Action): Boolean = oldItem.id == newItem.id
+        override fun areItemsTheSame(oldItem: Action, newItem: Action): Boolean = oldItem.uuid == newItem.uuid // Use UUID for stable item identification
         override fun areContentsTheSame(oldItem: Action, newItem: Action): Boolean = oldItem == newItem
     }
 }

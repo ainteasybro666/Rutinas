@@ -21,6 +21,9 @@ interface ActionDao {
     @Query("UPDATE actions SET executionOrder = :order WHERE uuid = :uuid")
     suspend fun updateActionOrder(uuid: String, order: Int)
 
+    @Query("DELETE FROM actions WHERE routineId = :routineId")
+    suspend fun deleteActionsForRoutine(routineId: Long)
+
     @Update
     suspend fun update(action: Action)
 

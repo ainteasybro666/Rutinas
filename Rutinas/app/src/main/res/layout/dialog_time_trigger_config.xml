@@ -14,14 +14,45 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <CheckBox
-        android:id="@+id/checkboxWeekly"
-        android:layout_width="match_parent"
+    <TextView
+        android:id="@+id/tvFrequency"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Repetir semanalmente"
-        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="16dp"
+        android:text="Frecuencia"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/timePicker" />
+
+    <RadioGroup
+        android:id="@+id/rgFrequency"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/tvFrequency">
+
+        <RadioButton
+            android:id="@+id/rbOnce"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Una vez" />
+
+        <RadioButton
+            android:id="@+id/rbWeekly"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Semanalmente" />
+
+        <RadioButton
+            android:id="@+id/rbMonthly"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Mensualmente" />
+    </RadioGroup>
 
     <LinearLayout
         android:id="@+id/daysOfWeekGroup"
@@ -31,7 +62,7 @@
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/checkboxWeekly">
+        app:layout_constraintTop_toBottomOf="@+id/rgFrequency">
 
         <CheckBox
             android:id="@+id/cbSunday"
@@ -82,14 +113,6 @@
             android:layout_weight="1"
             android:text="S" />
     </LinearLayout>
-    <CheckBox
-        android:id="@+id/checkboxMonthly"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Repetir mensualmente"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/daysOfWeekGroup" />
 
     <NumberPicker
         android:id="@+id/dayOfMonth"
@@ -98,6 +121,6 @@
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/checkboxMonthly" />
+        app:layout_constraintTop_toBottomOf="@+id/daysOfWeekGroup" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

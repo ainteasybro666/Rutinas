@@ -17,7 +17,7 @@ import com.example.rutinas.data.model.RoutineEntity
 
 @Database(
     entities = [RoutineEntity::class, Trigger::class, Action::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(

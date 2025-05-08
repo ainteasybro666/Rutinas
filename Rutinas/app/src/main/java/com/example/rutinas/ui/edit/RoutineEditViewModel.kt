@@ -6,7 +6,6 @@ import com.example.rutinas.data.model.Action
 import com.example.rutinas.data.model.Trigger
 import com.example.rutinas.data.repository.RoutineRepository
 import com.example.rutinas.domain.Routine
-import com.example.rutinas.ui.viewmodel.BaseViewModel
 import com.example.rutinas.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -19,7 +18,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.time.LocalDateTime
+import java.util.UUID // Import UUID
 import javax.inject.Inject
+
 
 @HiltViewModel
 class RoutineEditViewModel @Inject constructor(
@@ -35,58 +36,99 @@ class RoutineEditViewModel @Inject constructor(
     private val _saveResult = MutableSharedFlow<Resource<Long>>()
     val saveResult: SharedFlow<Resource<Long>> = _saveResult.asSharedFlow()
 
-    fun loadRoutine(uuid: String) {
-        Timber.d("Cargando rutina con UUID: $uuid")
-        viewModelScope.launch {
-            val routine = repository.getRoutineByUuid(uuid)
-            _currentRoutine.value = routine
-            _actions.value = routine?.actions ?: emptyList()
-            Timber.d("Rutina cargada: $routine")
+    private var isNewRoutine: Boolean = true // Flag to track if it's a new routine
+
+    // Load routine based on UUID, or initialize for a new routine
+    fun loadRoutine(uuid: String?) { // Acepta String?
+        if (uuid == null) {
+            // Creating a new routine
+            isNewRoutine = true
+            val newUuid = UUID.randomUUID().toString()
+            _currentRoutine.value = Routine(id = 0, uuid = newUuid, name = "", triggers = emptyList(), actions = emptyList())
+            _actions.value = emptyList() // Initial state for a new routine
+            Timber.d("Initializing ViewModel for new routine with UUID: $newUuid")
+        } else {
+            // Editing existing routine
+            isNewRoutine = false
+            Timber.d("Loading routine with UUID: $uuid")
+            viewModelScope.launch {
+                val routine = repository.getRoutineByUuid(uuid)
+                _currentRoutine.value = routine
+                _actions.value = routine?.actions ?: emptyList()
+                Timber.d("Rutina cargada: $routine")
+            }
         }
     }
 
     fun updateAction(updatedAction: Action) {
-        Timber.d("Actualizando acción: $updatedAction")
+        Timber.d("updateAction called with: $updatedAction")
+        Timber.d("updateAction: Current actions before update: ${_actions.value}")
         viewModelScope.launch {
-            val actionToUpdate = updatedAction.copy(data = updatedAction.data, pauseDuration = updatedAction.pauseDuration)
-            repository.updateAction(actionToUpdate)
             _actions.update { currentActions ->
-                currentActions.map { action ->
-                    if (action.uuid == updatedAction.uuid) actionToUpdate else action
+                Timber.d("updateAction: Inside _actions.update. Current actions: $currentActions")
+                val newList = currentActions.map { action ->
+                    if (action.uuid == updatedAction.uuid) {
+                        Timber.d("updateAction: Found action with matching UUID: ${action.uuid}. Replacing with: $updatedAction")
+                        updatedAction
+                    } else {
+                        action
+                    }
                 }
+                Timber.d("updateAction: New list after map: $newList")
+                newList
             }
-            Timber.d("Acción actualizada en la lista: ${_actions.value}")
         }
     }
 
-    //  No es necesario llamar a repository.updateActions aquí, ya que las acciones se guardan/actualizan individualmente.
-    fun updateActions(newActions: List<Action>) {
-        Timber.d("Actualizando lista de acciones (sin guardar en repositorio): $newActions")
-        _actions.value = newActions
+
+    // Renamed and modified to be triggered by the adapter after a move
+    fun onActionListReordered(reorderedActions: List<Action>) {
+        Timber.d("Lista de acciones reordenada en el ViewModel: $reorderedActions")
+        _actions.value = reorderedActions // Update the ViewModel's list
+        // The saving of the new order happens when saveRoutine is called
     }
+
 
     fun removeAction(action: Action) {
         Timber.d("Eliminando acción: $action")
         viewModelScope.launch {
-            repository.deleteAction(action)
+            // Consider if you need to delete from the database immediately or only on save
+            // For now, we'll remove from the ViewModel's list
             _actions.update { it.filterNot { it.uuid == action.uuid } }
-            Timber.d("Acción eliminada de la lista: ${_actions.value}")
+            Timber.d("Acción eliminada de la lista del ViewModel: ${_actions.value}")
+            // If you need to delete from DB immediately: repository.deleteAction(action)
         }
     }
 
     fun addAction(action: Action) {
-        Timber.d("Añadiendo nueva acción: $action")
+        Timber.d("addAction called with: $action")
+        Timber.d("addAction: Current actions before adding: ${_actions.value}")
         val currentActions = _actions.value.toMutableList()
-        currentActions.add(action)
-        // Actualizar _actions con la nueva lista
-        _actions.value = currentActions.toList() // Convertir a lista inmutable
+        // Generar UUID solo si está vacío
+        val actionToAdd = if (action.uuid.isEmpty()) {
+            action.copy(uuid = UUID.randomUUID().toString())
+        } else {
+            action // Usar el UUID existente si ya lo tiene
         }
+        currentActions.add(actionToAdd) // Usar actionToAdd aquí
+        _actions.value = currentActions.toList()
+        Timber.d("Nueva acción con UUID añadida a la lista del ViewModel: ${_actions.value}")
+        // Opcional: Devuelve la acción añadida con el UUID para que el Fragment la use directamente
+        // return actionToAdd
+    }
 
-    fun saveRoutine(name: String, triggers: List<Trigger>, actions: List<Action>) {
-        Timber.d("Guardando rutina con nombre: $name, triggers: $triggers, acciones: $actions")
+    fun saveRoutine(name: String) { // Ya no recibe triggers ni actions
+        Timber.d("Guardando rutina con nombre: $name")
         viewModelScope.launch {
-            // Validaciones de triggers
-            for (trigger in triggers) {
+            val currentRoutine = _currentRoutine.value
+            if (currentRoutine == null) {
+                _saveResult.emit(Resource.Error("No se puede guardar la rutina: _currentRoutine es nulo"))
+                Timber.e("Error al guardar rutina: _currentRoutine es nulo")
+                return@launch
+            }
+
+            // Validaciones de triggers (usando el estado del ViewModel)
+            for (trigger in currentRoutine.triggers) { // Usa triggers del ViewModel
                 if (trigger.triggerType == "TIME") {
                     val frequency = trigger.data.data["frequency"] as? String
                     val daysOfWeek = trigger.data.data["daysOfWeek"] as? List<Int>
@@ -105,26 +147,32 @@ class RoutineEditViewModel @Inject constructor(
             }
 
             try {
-                val routine = _currentRoutine.value?.copy(
+                val routineToSave = currentRoutine.copy(
                     name = name,
-                    triggers = triggers,
-                    actions = actions
-                ) ?: Routine(
-                    name = name,
-                    uuid = "",
-                    triggers = triggers,
-                    actions = actions,
-                    createdDate = LocalDateTime.now()
+                    // triggers y actions ya están en los StateFlows del ViewModel
+                    triggers = currentRoutine.triggers, // Usa triggers del ViewModel
+                    actions = _actions.value // Usa actions del ViewModel
                 )
-                val result = repository.saveRoutine(routine)
-                if (result is Resource.Success) {
-                    _currentRoutine.value = routine.copy(id = result.data)
-                    _actions.value = actions
-                    Timber.d("Rutina guardada con éxito, ID: ${result.data}")
-                } else if (result is Resource.Error) {
-                    Timber.e("Error al guardar rutina: ${result.message}")
+
+                val resultId = if (isNewRoutine) {
+                    repository.insertRoutine(routineToSave) // Asume que insertRoutine devuelve el ID
+                } else {
+                    repository.updateRoutine(routineToSave) // Asume que updateRoutine actualiza y no devuelve nada o el ID
+                    routineToSave.id // Si es update, usa el ID existente
                 }
-                _saveResult.emit(result)
+
+                // Emite un resultado de éxito con el ID guardado/actualizado
+                _saveResult.emit(Resource.Success(resultId)) // Ajusta según lo que devuelva insert/update
+
+                // Actualiza el StateFlow _currentRoutine con el ID si era una nueva rutina
+                if (isNewRoutine) {
+                    _currentRoutine.value = routineToSave.copy(id = resultId)
+                    isNewRoutine = false // Ya no es una rutina nueva después de guardar
+                }
+
+
+                Timber.d("Rutina guardada con éxito, ID: $resultId")
+
             } catch (e: Exception) {
                 Timber.e("Error inesperado al guardar rutina: ${e.message}")
                 _saveResult.emit(Resource.Error(e.message ?: "Error desconocido"))
@@ -132,7 +180,6 @@ class RoutineEditViewModel @Inject constructor(
         }
     }
 
-    //  Nueva función para agregar un trigger.  Podría ser útil en el futuro si permitimos agregar triggers directamente desde el ViewModel.
     fun addTrigger(trigger: Trigger) {
         Timber.d("Agregando trigger: $trigger")
         _currentRoutine.update { currentRoutine ->
