@@ -30,7 +30,7 @@ data class Action(
     val routineId: Long,
     @ColumnInfo(name = "data")
     val data: DataWrapper? = null,
-    val executionOrder: Int,
+    var executionOrder: Int,
     val pauseDuration: Long? = null
 ) : Parcelable {
     fun getString(key: String): String? = data?.data?.get(key) as? String
