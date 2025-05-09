@@ -8,10 +8,15 @@
     <fragment
         android:id="@+id/routineListFragment"
         android:name="com.example.rutinas.ui.main.fragments.RoutineListFragment"
-        android:label="Rutinas">
+        android:label="Rutinas" >
         <action
             android:id="@+id/action_routineListFragment_to_routineEditFragment"
-            app:destination="@id/routineEditFragment" />
+            app:destination="@id/routineEditFragment" >
+            <argument
+                android:name="routineUuid"
+                app:argType="string"
+                app:nullable="true"  /> <!-- Añadir nullable="true" para permitir pasar null al crear una nueva rutina -->
+        </action>
         <action
             android:id="@+id/action_routineListFragment_to_statusFragment"
             app:destination="@id/statusFragment" />
@@ -22,6 +27,12 @@
         android:id="@+id/routineEditFragment"
         android:name="com.example.rutinas.ui.edit.RoutineEditFragment"
         android:label="Editar Rutina">
+        <!-- **CORREGIDO: Mover la definición del argumento aquí** -->
+        <argument
+            android:name="routineUuid"
+            app:argType="string"
+            app:nullable="true"  />
+
         <action
             android:id="@+id/action_routineEditFragment_to_editAnnouncementActionDialogFragment"
             app:destination="@id/editAnnouncementActionDialogFragment" />
@@ -43,7 +54,11 @@
         <action
             android:id="@+id/action_routineEditFragment_to_editVolumeActionDialogFragment"
             app:destination="@id/editVolumeActionDialogFragment" />
+        <action
+            android:id="@+id/action_routineEditFragment_to_editPauseActionDialogFragment"
+            app:destination="@id/editPauseActionDialogFragment" />"
     </fragment>
+
 
     <!-- Diálogos de edición, cada uno con el argumento requerido -->
     <dialog
@@ -104,6 +119,15 @@
         android:id="@+id/editVolumeActionDialogFragment"
         android:name="com.example.rutinas.ui.edit.actions.EditVolumeActionDialogFragment"
         android:label="Editar Volumen">
+        <argument
+            android:name="arg_action"
+            app:argType="com.example.rutinas.data.model.Action" />
+    </dialog>
+
+    <dialog
+        android:id="@+id/editPauseActionDialogFragment"
+        android:name="com.example.rutinas.ui.edit.actions.EditPauseActionDialogFragment"
+        android:label="Introducir pausa">
         <argument
             android:name="arg_action"
             app:argType="com.example.rutinas.data.model.Action" />

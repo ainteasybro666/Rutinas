@@ -14,6 +14,9 @@ import com.example.rutinas.ui.main.adapter.RoutineAdapter
 import com.example.rutinas.ui.viewmodel.RoutineListViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
+// Importar NavController
+import androidx.navigation.fragment.findNavController
+
 @AndroidEntryPoint
 class RoutineListFragment : BaseFragment() {
 
@@ -38,9 +41,16 @@ class RoutineListFragment : BaseFragment() {
     }
 
     private fun setupRecyclerView() {
-        adapter = RoutineAdapter { routine, isChecked ->
-            viewModel.toggleRoutineStatus(routine.id, isChecked)
-        }
+        adapter = RoutineAdapter(
+            onSwitchChanged = { routine, isChecked ->
+                // Manejar el cambio del switch (ya implementado)
+                viewModel.toggleRoutineStatus(routine.id, isChecked)
+            },
+            onRoutineClicked = { routine ->
+                // Manejar el clic en el item de la rutina
+                navigateToEditRoutine(routine.uuid)
+            }
+        )
         vb.rvRoutines.layoutManager = LinearLayoutManager(requireContext())
         vb.rvRoutines.adapter = adapter
     }
@@ -49,6 +59,14 @@ class RoutineListFragment : BaseFragment() {
         viewModel.routines.observe(viewLifecycleOwner) { routines ->
             adapter.submitList(routines)
         }
+    }
+
+    // Función para navegar al fragmento de edición
+    private fun navigateToEditRoutine(routineUuid: String) {
+        // Asegúrate de que la acción de navegación está definida en tu nav_graph.xml
+        // y que acepta un argumento 'routine_uuid' de tipo String.
+        val action = RoutineListFragmentDirections.actionRoutineListFragmentToRoutineEditFragment(routineUuid = routineUuid)
+        findNavController().navigate(action)
     }
 
     fun onPermissionGranted() {

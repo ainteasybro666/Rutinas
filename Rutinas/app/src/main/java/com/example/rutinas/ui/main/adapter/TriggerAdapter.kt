@@ -18,6 +18,7 @@ class TriggerAdapter(
     ) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(trigger: Trigger) {
+            Timber.d("TriggerViewHolder: Binding trigger with UUID: ${trigger.uuid}, Type: ${trigger.triggerType}") // Log binding call
             with(binding) {
                 // Configurar el texto según el tipo de trigger
                 when (trigger.triggerType) {

@@ -9,6 +9,7 @@ import androidx.navigation.ui.NavigationUI
 import com.example.rutinas.R
 import com.example.rutinas.databinding.ActivityMainBinding
 import com.example.rutinas.ui.common.BaseActivity
+import com.example.rutinas.ui.main.fragments.RoutineListFragmentDirections
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -38,7 +39,10 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         binding.fabAddRoutine.setOnClickListener {
             // Solo navegar a la edición desde el fragmento de rutinas ("Rutinas")
             if (navController.currentDestination?.id == R.id.routineListFragment) {
-                navController.navigate(R.id.action_routineListFragment_to_routineEditFragment)
+                // Navegar a RoutineEditFragment pasando null como UUID para crear una nueva rutina
+                // Usamos la clase Directions generada por el Navigation Component
+                val action = RoutineListFragmentDirections.actionRoutineListFragmentToRoutineEditFragment(routineUuid = null as String?)
+                navController.navigate(action)
             } else {
                 Toast.makeText(this, "Acción no disponible en este contexto", Toast.LENGTH_SHORT)
                     .show()
