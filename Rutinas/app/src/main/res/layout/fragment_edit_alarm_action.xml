@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:padding="16dp">
@@ -14,34 +15,64 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <EditText
-        android:id="@+id/etLabel"
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/tilLabel"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:hint="Etiqueta (opcional)"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/timePicker" />
+        app:layout_constraintTop_toBottomOf="@+id/timePicker">
 
-    <EditText
-        android:id="@+id/etDuration"
-        android:layout_width="0dp"
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textCapWords" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- Spinner for Duration - Using original ID etDuration -->
+    <TextView
+        android:id="@+id/tvDurationLabel"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:hint="Duracion (opcional)"
-        app:layout_constraintEnd_toEndOf="parent"
+        android:text="Duración"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/etLabel" />
+        app:layout_constraintTop_toBottomOf="@+id/tilLabel" />
 
-    <EditText
-        android:id="@+id/etRepetitions"
-        android:layout_width="0dp"
+
+    <Spinner
+        android:id="@+id/etDuration"  /> <!-- Replaced EditText with Spinner, kept ID -->
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="4dp"
+    android:entries="@array/duration_presets"
+    app:layout_constraintEnd_toEndOf="parent"
+    app:layout_constraintStart_toStartOf="parent"
+    app:layout_constraintTop_toBottomOf="@+id/tvDurationLabel" />
+
+
+    <!-- Spinner for Repetitions - Using original ID etRepetitions -->
+    <TextView
+        android:id="@+id/tvRepetitionsLabel"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:hint="Repeticiones (opcional)"
-        app:layout_constraintEnd_toEndOf="parent"
+        android:text="Repeticiones"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/etDuration" />
+
+    <Spinner
+        android:id="@+id/etRepetitions" /> <!-- Replaced EditText with Spinner, kept ID -->
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="4dp"
+    android:entries="@array/repetition_counts"
+    app:layout_constraintEnd_toEndOf="parent"
+    app:layout_constraintStart_toStartOf="parent"
+    app:layout_constraintTop_toBottomOf="@+id/tvRepetitionsLabel" />
+
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -24,7 +24,7 @@ data class Action(
     val routineId: Long,
     @ColumnInfo(name = "data")
     val data: DataWrapper? = null,
-    val executionOrder: Int,
+    var executionOrder: Int,
     val pauseDuration: Long? = null
 ) : Parcelable {
     fun getString(key: String): String? = data?.data?.get(key) as? String
@@ -83,211 +83,6 @@ data class Action(
     }
 }
 
-// ActionCategory.kt
-
-package com.example.rutinas.data.model
-
-data class ActionCategory(
-    val name: String,
-    val actions: List<ActionType>
-)
-
-// ActionType.kt
-
-package com.example.rutinas.data.model
-
-enum class ActionType {
-    ANNOUNCEMENT,
-    ALARM,
-    READ_NOTIFICATIONS,
-    TIME,
-    VOLUME,
-    BRIGHTNESS,
-    SOUND_MODE,
-    PAUSE;
-
-    companion object {
-        fun fromString(value: String): ActionType {
-            return when (value) {
-                "ANNOUNCEMENT" -> ANNOUNCEMENT
-                "ALARM" -> ALARM
-                "READ_NOTIFICATIONS" -> READ_NOTIFICATIONS
-                "TIME" -> TIME
-                "VOLUME" -> VOLUME
-                "BRIGHTNESS" -> BRIGHTNESS
-                "SOUND_MODE" -> SOUND_MODE
-                "PAUSE" -> PAUSE
-                else -> throw IllegalArgumentException("Invalid ActionType value: $value")
-            }
-        }
-    }
-
-    override fun toString(): String {
-        return when (this) {
-            ANNOUNCEMENT -> "ANNOUNCEMENT"
-            ALARM -> "ALARM"
-            READ_NOTIFICATIONS -> "READ_NOTIFICATIONS"
-            TIME -> "TIME"
-            VOLUME -> "VOLUME"
-            BRIGHTNESS -> "BRIGHTNESS"
-            SOUND_MODE -> "SOUND_MODE"
-            PAUSE -> "PAUSE"
-        }
-    }
-}
-
-// ActionUi.kt
-
-package com.example.rutinas.data.model
-
-data class ActionUi(
-    val id: Long,
-    val uuid: String,
-    val type: ActionType,
-    val routineId: Long,
-    val data: String,
-    val executionOrder: Int,
-    val pauseDuration: Long?,
-) {
-
-    val title: String
-        get() = when (type) {
-            ActionType.ANNOUNCEMENT -> "Anuncio"
-            ActionType.ALARM -> "Alarma"
-            ActionType.READ_NOTIFICATIONS -> "Leer Notificaciones"
-            ActionType.TIME -> "Decir Hora"
-            ActionType.VOLUME -> "Ajustar Volumen"
-            ActionType.BRIGHTNESS -> "Ajustar Brillo"
-            ActionType.SOUND_MODE -> "Modo de Sonido"
-            ActionType.PAUSE -> "Pausa"
-        }
-
-    val description: String
-        get() = when (type) {
-            ActionType.ANNOUNCEMENT -> data.substringAfter("\"message\":", "Sin mensaje").substringBefore("}", "Sin mensaje").replace("\"", "")
-            ActionType.ALARM -> "Alarma: ${data.substringAfter("\"time\":", "No configurada").substringBefore("}", "No configurada").replace("\"", "")}"
-            ActionType.READ_NOTIFICATIONS -> "Leer notificaciones activas"
-            ActionType.TIME ->  "Informar hora actual"
-            ActionType.VOLUME -> {
-                val volumes = mutableListOf<String>()
-                if (data.contains("\"mediaVolume\"")) volumes.add("Media")
-                if (data.contains("\"ringtoneVolume\"")) volumes.add("Ringtone")
-                if (data.contains("\"alarmVolume\"")) volumes.add("Alarma")
-                "Ajustar volumen: ${volumes.joinToString(", ")}"
-            }
-            ActionType.BRIGHTNESS -> "Brillo: ${data.substringAfter("\"level\":", "0").substringBefore("}", "0").replace("\"", "")}%"
-            ActionType.SOUND_MODE -> when {
-                data.contains("\"mode\":\"silent\"") -> "Modo silencioso"
-                data.contains("\"mode\":\"vibrate\"") -> "Modo vibración"
-                else -> "Modo no especificado"
-            }
-            ActionType.PAUSE -> if (pauseDuration != null) {
-                if (pauseDuration < 1000) "Pausa de $pauseDuration milisegundos"
-                else "Pausa de ${pauseDuration.div(1000)} segundos"
-            } else {
-                "Pausa"
-            }
-       }
-}
-
-// DataWrapper.kt
-
-package com.example.rutinas.data.model
-
-
-@Parcelize
-data class DataWrapper(val data: Map<String, Any> = emptyMap()) : Parcelable {
-
-    companion object : Parceler<DataWrapper> {
-
-        override fun create(parcel: Parcel): DataWrapper {
-            val serializedMap = parcel.readString()
-            val map = deserializeMap(serializedMap) ?: emptyMap()
-            return DataWrapper(map)
-        }
-
-        override fun DataWrapper.write(parcel: Parcel, flags: Int) {
-            val serializedMap = serializeMap(data)
-            parcel.writeString(serializedMap)
-        }
-
-        private fun serializeMap(map: Map<String, Any>): String? {
-            return try {
-                val byteArrayOutputStream = ByteArrayOutputStream()
-                ObjectOutputStream(byteArrayOutputStream).use { objectOutputStream ->
-                    objectOutputStream.writeObject(map)
-                }
-                byteArrayOutputStream.toString("ISO-8859-1")
-            } catch (e: Exception) {
-                null
-            }
-        }
-        @Suppress("UNCHECKED_CAST")
-        private fun deserializeMap(serializedMap: String?): Map<String, Any>? {
-            if (serializedMap == null) return null
-            return try {
-                val byteArrayInputStream = ByteArrayInputStream(serializedMap.toByteArray(charset("ISO-8859-1")))
-                ObjectInputStream(byteArrayInputStream).use { objectInputStream ->
-                    objectInputStream.readObject() as? Map<String, Any>
-                }
-            } catch (e: Exception) {
-                null
-            }
-        }
-    }
-}
-
-// DataWrapperTypeConverter.kt
-
-package com.example.rutinas.data.model
-
-
-class DataWrapperTypeConverter {
-    private val gson = Gson()
-
-    @TypeConverter
-    fun fromDataWrapper(dataWrapper: DataWrapper?): String? {
-        return dataWrapper?.let { gson.toJson(it.data) }
-    }
-
-    @TypeConverter
-    fun toDataWrapper(dataString: String?): DataWrapper? {
-        dataString?.let {
-            val mapType = object : TypeToken<Map<String, Any>>() {}.type
-            val data: Map<String, Any> = gson.fromJson(it, mapType)
-            return DataWrapper(data)
-        }
-        return null
-    }
-}
-
-// FrequencyType.kt
-
-package com.example.rutinas.data.model
-
-enum class FrequencyType {
-    ONCE,
-    WEEKLY,
-    MONTHLY,
-}
-
-// RoutineEntity.kt
-
-package com.example.rutinas.data.model
-
-
-@Entity(tableName = "routines")
-@Parcelize
-data class RoutineEntity(
-    @PrimaryKey(autoGenerate = true)
-    val id: Long = 0,
-    val uuid: String = UUID.randomUUID().toString(),
-    val name: String,
-    val description: String? = null,
-    val isEnabled: Boolean = true,
-    val createdDate: LocalDateTime = LocalDateTime.now()
-) : Parcelable
-
 // Trigger.kt
 
 package com.example.rutinas.data.model
@@ -316,4 +111,540 @@ data class Trigger(
     @ColumnInfo(name = "trigger_data")
     val data: DataWrapper
 ) : Parcelable
+
+// Alarmscheduler.kt
+
+package com.example.rutinas.alarms
+
+
+class AlarmScheduler @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val routineRepository: RoutineRepository // Inject RoutineRepository here
+) {
+
+    private val alarmManager: AlarmManager =
+        context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+    fun schedule(routine: Routine) {
+        Timber.d("Programando alarmas para la rutina: ${routine.uuid}, ${routine.name}")
+
+        // Cancelar alarmas existentes antes de programar nuevas
+        cancel(routine)
+
+        routine.triggers.filter { it.triggerType == "TIME" }
+            .forEach { trigger -> scheduleTimeTrigger(routine, trigger) }
+    }
+
+    private fun scheduleTimeTrigger(routine: Routine, trigger: Trigger) {
+        //Comprobamos que el dataWrapper no sea nulo.
+        val dataWrapper = trigger.data ?: return
+        //Comprobamos que el mapa no sea nulo
+        val mapData = dataWrapper.data ?: return
+
+        val hour = mapData["hour"] as? Int
+        val minute = mapData["minute"] as? Int
+        val frequency = mapData["frequency"] as? String ?: "daily"
+
+        if (hour == null || minute == null) {
+            throw IllegalArgumentException("Hour and minute must be specified for time triggers.")
+        }
+
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+
+            // Primero: ajustar para ocurrencias pasadas
+            when (frequency) {
+                "daily" -> if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_MONTH, 1)
+                "weekly" -> {
+                    val daysOfWeek = mapData["daysOfWeek"] as? List<Int>
+                    if (daysOfWeek.isNullOrEmpty()) return@apply
+                    while (timeInMillis <= System.currentTimeMillis() ||
+                        !daysOfWeek.contains(get(Calendar.DAY_OF_WEEK) - 1)
+                    ) {
+                        add(Calendar.DAY_OF_WEEK, 1)
+                    }
+                }
+                "monthly" -> if (timeInMillis <= System.currentTimeMillis()) add(Calendar.MONTH, 1)
+            }
+
+            // Segundo: ajustes adicionales según frecuencia
+            when (frequency) {
+                "weekly" -> {
+                    val daysOfWeek = mapData["daysOfWeek"] as? List<Int> ?: return@apply
+                    val target = (daysOfWeek.minOrNull() ?: return@apply) + 1
+                    while (get(Calendar.DAY_OF_WEEK) != target) add(Calendar.DAY_OF_WEEK, 1)
+                }
+                "monthly" -> {
+                    val dayOfMonth = (mapData["dayOfMonth"] as? Number)?.toInt() ?: 1
+                    set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                    if (get(Calendar.DAY_OF_MONTH) != dayOfMonth) {
+                        set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
+                    }
+                }
+            }
+        }
+
+        val alarmId = generateAlarmId(routine, trigger)
+        val pendingIntent = createPendingIntent(routine, alarmId)
+
+        // Log usando la variable 'frequency' declarada fuera del apply
+        Timber.d("Programando alarma $frequency para $hour:$minute (${routine.name}), id: $alarmId, time: ${calendar.time}")
+
+        if (canScheduleExactAlarms()) {
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
+        } else {
+            alarmManager.setWindow(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, 300_000, pendingIntent)
+            Timber.w("Sin permisos para alarmas exactas; usando ventana de 5 minutos.")
+        }
+    }
+
+    fun cancel(routine: Routine) {
+        Timber.d("Cancelando alarmas para la rutina: ${routine.uuid}, ${routine.name}")
+        routine.triggers.filter { it.triggerType == "TIME" }.forEach { trigger ->
+            cancelTimeTrigger(routine, trigger)
+        }
+    }
+
+    private fun cancelTimeTrigger(routine: Routine, trigger: Trigger) {
+        val alarmId = generateAlarmId(routine, trigger)
+        val pendingIntent = createPendingIntent(routine, alarmId)
+        alarmManager.cancel(pendingIntent)
+        Timber.d("Alarma cancelada para ${routine.name}, id: $alarmId")
+    }
+
+    private fun generateAlarmId(routine: Routine, trigger: Trigger): Int {
+        // Combine routine UUID and a trigger identifier to create a unique ID
+        return "${routine.uuid}-${trigger.uuid}".hashCode()
+    }
+
+    // Now this method uses RoutineRepository to get the RoutineEntity
+    private suspend fun getRoutineEntityByUuid(uuid: String): RoutineEntity? {
+        Timber.d("Buscando rutina en la base de datos con UUID: $uuid")
+        val routine = routineRepository.getRoutineByUuid(uuid)
+        return routine?.let { // Convertir de Routine a RoutineEntity
+            RoutineEntity(
+                id = it.id,
+                uuid = it.uuid,
+                name = it.name,
+                description = it.description,
+                isEnabled = it.isEnabled,
+                createdDate = it.createdDate
+            )
+        }
+    }
+
+    private fun createPendingIntent(routine: Routine, alarmId: Int): PendingIntent {
+        //  Obtener la RoutineEntity a partir del UUID.  Adaptar esto según tu implementación.
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId)
+            putExtra(AlarmReceiver.EXTRA_ROUTINE_UUID, routine.uuid)  // Pasar UUID
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            alarmId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    suspend fun rescheduleAll() {
+        Timber.d("Reprogramando todas las alarmas...")
+        routineRepository.getAllRoutines().collect{ routines ->
+            routines.filter { it.isEnabled }.forEach{ routine ->
+                schedule(routine)
+            }
+        }
+    }
+
+    fun canScheduleExactAlarms(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager.canScheduleExactAlarms()
+        } else {
+            true // En versiones anteriores a Android 12, no hay restricciones
+        }
+    }
+}
+
+// Routineexecutor.kt
+
+package com.example.rutinas.execution
+
+
+class RoutineExecutor @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
+
+    companion object {
+        private const val CHANNEL_ID = "RoutineNotifications"
+    }
+
+    private val notificationManager = ContextCompat.getSystemService(context, NotificationManager::class.java)
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private var textToSpeech: TextToSpeech? = null
+    private val notificationReader = NotificationReader(context)
+
+
+    init {
+        createNotificationChannel()
+        initializeTextToSpeech()
+        notificationReader.initialize {}
+    }
+
+
+    fun executeRoutine(routine: Routine, alarmId: Int) {
+        Timber.d("RoutineExecutor: executeRoutine called")
+        Timber.i("RoutineExecutor: Executing routine: ${routine.name} (${routine.uuid}), triggered by alarmId: $alarmId")
+
+        val handler = Handler(Looper.getMainLooper())
+        CoroutineScope(Dispatchers.Main).launch {
+            for (action in routine.actions) {
+                runCatching { executeAction(action, handler) }
+                    .onFailure { Timber.e(it, "Error executing action: $action") }
+            }
+            Timber.i("RoutineExecutor: Finished executing routine: ${routine.name}")
+        }
+    }
+
+    private suspend fun executeAction(action: Action, handler: Handler) {
+        Timber.d("RoutineExecutor: executeAction called")
+        Timber.d("RoutineExecutor: Executing action: ${action.actionType}, data: ${action.data}, action id: ${action.uuid}")
+        val actionType = action.actionType
+        when (actionType) {
+            ActionType.ALARM -> handleAlarmAction(action.data?.data)
+            ActionType.ANNOUNCEMENT -> handleAnnouncementAction(action.data?.data, handler)
+            ActionType.BRIGHTNESS -> handleBrightnessAction(action.data?.data)
+            ActionType.READ_NOTIFICATIONS -> handleReadNotificationsAction(action.data?.data)
+            ActionType.SOUND_MODE -> handleSoundModeAction(action.data?.data)
+            ActionType.TIME -> handleTimeAction(handler)
+            ActionType.VOLUME -> handleVolumeAction(action.data?.data)
+            ActionType.PAUSE -> handlePauseAction(action)
+            else -> Timber.w("RoutineExecutor: Unknown action type: ${action.actionType}")
+        }
+    }
+
+    private fun handleAlarmAction(data: Map<String, Any>?) {
+        Timber.d("RoutineExecutor: handleAlarmAction called")
+        val duration = (data?.get("duration") as? Number)?.toInt() ?: 30
+        val repeatEnabled = data?.get("repeatEnabled") as? Boolean ?: false
+
+        Timber.i("RoutineExecutor: Triggering ALARM action - duration: $duration, repeat: $repeatEnabled")
+
+        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        val notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        val ringtone = RingtoneManager.getRingtone(context, notificationUri)
+
+        val pattern = longArrayOf(0, 500, 200, 500) // Vibrate for 500ms, pause for 200ms, repeat
+        val vibrationEffect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            VibrationEffect.createWaveform(pattern, 0)
+        } else {
+            null
+        }
+
+        try {
+            ringtone.play()
+            if (vibrationEffect != null) {
+                vibrator.vibrate(vibrationEffect)
+            } else {
+                vibrator.vibrate(pattern, 0) // Older versions
+            }
+
+            displayNotification(
+                mapOf(
+                    "title" to "Alarm Triggered",
+                    "text" to "An alarm action has been triggered."
+                )
+            )
+        } catch (e: Exception) {
+            Timber.e(e, "Error playing alarm")
+        }
+
+        if (repeatEnabled) {
+            //TODO implement repeating alarm
+            Timber.w("Repeating alarms not implemented yet")
+        }
+        val handler = Handler(Looper.getMainLooper())
+        handler.postDelayed({
+            ringtone.stop()
+            vibrator.cancel()
+        }, duration * 1000L.toLong())
+    }
+
+
+    private fun handleAnnouncementAction(data: Map<String, Any>?, handler: Handler) {
+        Timber.d("RoutineExecutor: handleAnnouncementAction called")
+        val message = data?.get("message") as? String ?: ""
+        // val volume = (data?.get("volume") as? Number)?.toInt() ?: 50  // Unused for now
+
+        Timber.i("RoutineExecutor: Displaying ANNOUNCEMENT action - message: \"$message\"")
+
+        if (message.isNotBlank()) {
+            handler.post {
+                speakText(message)
+            }
+        }
+        //  TODO: Decide how to use the volume parameter (if needed).
+        //  It's not clear from the fragment how this volume is supposed to be applied.
+    }
+
+
+    private fun handleBrightnessAction(data: Map<String, Any>?) {
+        Timber.d("RoutineExecutor: handleBrightnessAction called")
+        val brightness = (data?.get("brightness") as? Number)?.toInt() ?: 50
+        val brightnessFloat = brightness / 100f
+
+        Timber.i("RoutineExecutor: Adjusting BRIGHTNESS action - brightness: $brightness ($brightnessFloat)")
+
+        try {
+            // Check if WRITE_SETTINGS permission is granted
+            if (Settings.System.canWrite(context)) {
+                // Set system brightness (requires WRITE_SETTINGS permission)
+                Settings.System.putInt(
+                    context.contentResolver,
+                    Settings.System.SCREEN_BRIGHTNESS,
+                    (brightnessFloat * 255).toInt() // Convert percentage to 0-255 range
+                )
+            } else {
+                Timber.w("RoutineExecutor: Cannot adjust brightness - WRITE_SETTINGS permission not granted.")
+                displayNotification(
+                    mapOf(
+                        "title" to "Permission Required",
+                        "text" to "Rutinas needs permission to change brightness."
+                    )
+                )
+            }
+        } catch (e: SecurityException) {
+            Timber.e("RoutineExecutor: SecurityException while adjusting brightness: ${e.message}")
+            displayNotification(
+                mapOf(
+                    "title" to "Permission Error",
+                    "text" to "Rutinas encountered an error while changing brightness."
+                )
+            )
+        } catch (e: Exception) {
+            Timber.e("RoutineExecutor: Error adjusting brightness: ${e.message}")
+        }
+    }
+
+    private fun handleReadNotificationsAction(data: Map<String, Any>?) {
+        Timber.d("RoutineExecutor: handleReadNotificationsAction called")
+        val excludedPackages = (data?.get("excludedPackages") as? String)
+            ?.split(",")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?: emptyList()
+        val delay = (data?.get("delay") as? Number)?.toInt() ?: 0
+
+        Timber.i("RoutineExecutor: Executing READ_NOTIFICATIONS action - excluded: $excludedPackages, delay: $delay")
+
+        // Check for Notification Listener Permission
+        if (isNotificationListenerEnabled()) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                notificationManager?.activeNotifications?.let { notifications ->
+                    notificationReader.readNotifications(notifications, excludedPackages) {}
+                }
+            }, delay * 1000L)
+        } else {
+            Timber.w("RoutineExecutor: Notification Listener not enabled. Cannot read notifications")
+            displayNotification(
+                mapOf(
+                    "title" to "Permission Required",
+                    "text" to "Rutinas needs Notification Access to read notifications"
+                )
+            )
+        }
+    }
+
+    private fun isNotificationListenerEnabled(): Boolean {
+        val enabledListeners = Settings.Secure.getString(
+            context.contentResolver,
+            "enabled_notification_listeners"
+        )
+        return enabledListeners?.contains(context.packageName + "/" + NotificationReader::class.java.name) ?: false
+    }
+
+
+
+    private fun handleSoundModeAction(data: Map<String, Any>?) {
+        Timber.d("RoutineExecutor: handleSoundModeAction called")
+        val mode = data?.get("mode") as? String ?: "normal"
+
+        Timber.i("RoutineExecutor: Adjusting SOUND_MODE action - mode: $mode")
+
+        try {
+            when (mode) {
+                "silent" -> audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+                "vibrate" -> audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
+                "normal" -> audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
+                else -> Timber.w("RoutineExecutor: Invalid sound mode: $mode")
+            }
+        } catch (e: SecurityException) {
+            Timber.e("RoutineExecutor: SecurityException while adjusting sound mode: ${e.message}")
+            displayNotification(
+                mapOf(
+                    "title" to "Permission Required",
+                    "text" to "Rutinas needs permission to change sound mode."
+                )
+            )
+        } catch (e: Exception) {
+            Timber.e("RoutineExecutor: Error adjusting sound mode: ${e.message}")
+        }
+    }
+
+    private fun handleTimeAction(handler: Handler) {
+        Timber.d("RoutineExecutor: handleTimeAction called")
+        Timber.i("RoutineExecutor: Executing TIME action - reading current time")
+        val calendar = Calendar.getInstance()
+        val sdf = SimpleDateFormat("h:mm a", Locale.getDefault()) // Format: 3:20 PM
+        val formattedTime = sdf.format(calendar.time)
+        val message = "Son las $formattedTime"
+
+        handler.post {
+            speakText(message)
+        }
+    }
+
+
+    private fun handleVolumeAction(data: Map<String, Any>?) {
+        Timber.d("RoutineExecutor: handleVolumeAction called")
+        Timber.i("RoutineExecutor: Adjusting VOLUME action - data: $data")
+
+        try {
+            data?.forEach { (streamType, volume) ->
+                val volumePercentage = (volume as? Number)?.toInt()
+                if (volumePercentage != null) {
+                    val stream = when (streamType) {
+                        "mediaVolume" -> AudioManager.STREAM_MUSIC
+                        "ringtoneVolume" -> AudioManager.STREAM_RING
+                        "alarmVolume" -> AudioManager.STREAM_ALARM
+                        else -> {
+                            Timber.w("RoutineExecutor: Unknown volume type: $streamType")
+                            null
+                        }
+                    }
+
+                    stream?.let {
+                        val maxVolume = audioManager.getStreamMaxVolume(it)
+                        val volumeLevel = (volumePercentage / 100f * maxVolume).toInt()
+                        audioManager.setStreamVolume(it, volumeLevel, 0)  // Flags = 0 (no UI)
+                        Timber.d("RoutineExecutor: Set $streamType volume to $volumePercentage% (level: $volumeLevel / $maxVolume)")
+                    }
+                }
+            }
+        } catch (e: SecurityException) {
+            Timber.e("RoutineExecutor: SecurityException while adjusting volume: ${e.message}")
+            displayNotification(
+                mapOf(
+                    "title" to "Permission Required",
+                    "text" to "Rutinas needs permission to change volume settings."
+                )
+            )
+        } catch (e: Exception) {
+            Timber.e("RoutineExecutor: Error adjusting volume: ${e.message}")
+        }
+    }
+
+    private suspend fun handlePauseAction(action: Action) {
+        Timber.d("RoutineExecutor: handlePauseAction called")
+        val duration = action.pauseDuration
+        if (duration != null) {
+            Timber.i("RoutineExecutor: Pausing for $duration ms")
+            delay(duration)
+            Timber.i("RoutineExecutor: Pause completed")
+        } else {
+            Timber.w("RoutineExecutor: Pause duration not specified for action: $action")
+        }
+    }
+
+
+    private fun displayNotification(data: Map<String, String>) {
+        val title = data["title"] ?: "Routine Notification"
+        val text = data["text"] ?: "A routine action was triggered."
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+
+        notificationManager?.notify(System.currentTimeMillis().toInt(), notification)
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "Routine Notifications"
+            val descriptionText = "Notifications for routine actions"
+            val importance = NotificationManager.IMPORTANCE_DEFAULT
+            val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
+                description = descriptionText
+            }
+            // Register the channel with the system
+            notificationManager?.createNotificationChannel(channel)
+        }
+    }
+
+    private fun initializeTextToSpeech() {
+        textToSpeech = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                val result = textToSpeech?.setLanguage(Locale.getDefault())
+                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    Timber.e("TTS: The specified language is not supported")
+                }
+            } else {
+                Timber.e("TTS: TextToSpeech initialization failed")
+            }
+        }
+    }
+
+    private fun speakText(text: String) {
+        textToSpeech?.speak(text, TextToSpeech.QUEUE_ADD, null, null)
+    }
+
+    fun shutdown() {
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
+        notificationReader.shutdown()
+    }
+}
+
+// Alarmreceiver.kt
+
+package com.example.rutinas.receivers
+
+
+@AndroidEntryPoint
+class AlarmReceiver : BroadcastReceiver() {
+
+    @Inject lateinit var routineRepository: RoutineRepository
+    @Inject lateinit var routineExecutor: RoutineExecutor
+    // Si quieres reprogramar tiempo de triggers, también puedes inyectar AlarmScheduler
+    @Inject lateinit var alarmScheduler: AlarmScheduler
+
+    override fun onReceive(context: Context, intent: Intent) {
+        val uuid = intent.getStringExtra(EXTRA_ROUTINE_UUID) ?: return
+        val alarmId = intent.getIntExtra(EXTRA_ALARM_ID, -1)
+        Timber.d("AlarmReceiver: Received alarm id=$alarmId, uuid=$uuid")
+
+        CoroutineScope(Dispatchers.IO).launch {
+            // Obtiene rutina del repositorio
+            val routine = routineRepository.getRoutineByUuid(uuid)
+            if (routine != null) {
+                // Ejecuta la rutina
+                routineExecutor.executeRoutine(routine, alarmId)
+                // Opcional: si necesitas reprogramar futuros triggers:
+                alarmScheduler.schedule(routine)
+            } else {
+                Timber.w("Routine no encontrada para uuid=$uuid")
+            }
+        }
+    }
+
+    companion object {
+        const val EXTRA_ALARM_ID = "com.example.rutinas.extra.ALARM_ID"
+        const val EXTRA_ROUTINE_UUID = "com.example.rutinas.extra.ROUTINE_UUID"
+    }
+}
 

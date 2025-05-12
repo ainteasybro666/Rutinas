@@ -45,6 +45,15 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- Register the AlarmStopperReceiver -->
+        <receiver android:name=".receivers.AlarmStopperReceiver"
+            android:exported="false"> <!-- Set exported to false for security if only your app sends this broadcast -->
+            <intent-filter>
+                <action android:name="com.example.rutinas.action.STOP_ALARM"/>
+            </intent-filter>
+        </receiver>
+
     </application>
     <queries>
         <package android:name="com.spotify.music" />

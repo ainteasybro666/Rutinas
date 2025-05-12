@@ -14,5 +14,6 @@ interface RoutineRepository {
     suspend fun updateActionsOrder(actions: List<Action>)
     suspend fun updateAction(action: Action)
     suspend fun deleteAction(action: Action)
-    suspend fun updateRoutine(routine: Routine) // <-- Añadida
+    suspend fun updateRoutine(routine: Routine)
+    suspend fun deleteRoutine(routine: Routine)
 }

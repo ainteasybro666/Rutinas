@@ -5,38 +5,45 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import com.example.rutinas.data.model.RoutineEntity
-import com.example.rutinas.data.repository.RoutineRepository
-import com.example.rutinas.domain.Routine
+import android.provider.Settings
 import com.example.rutinas.data.model.Trigger
+import com.example.rutinas.domain.Routine
+import com.example.rutinas.data.repository.RoutineRepository
 import com.example.rutinas.receivers.AlarmReceiver
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.filter
 import timber.log.Timber
 import java.util.Calendar
 import javax.inject.Inject
+import javax.inject.Singleton
 
+@Singleton
 class AlarmScheduler @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val routineRepository: RoutineRepository // Inject RoutineRepository here
+    private val routineRepository: RoutineRepository
 ) {
 
     private val alarmManager: AlarmManager =
         context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
-    fun schedule(routine: Routine) {
+    suspend fun schedule(routine: Routine) {
         Timber.d("Programando alarmas para la rutina: ${routine.uuid}, ${routine.name}")
 
         // Cancelar alarmas existentes antes de programar nuevas
         cancel(routine)
+
+        // NEW: Only schedule if the routine is enabled
+        if (!routine.isEnabled) {
+            Timber.d("Rutina ${routine.name} (${routine.uuid}) está deshabilitada. No se programarán alarmas.")
+            return
+        }
 
         routine.triggers.filter { it.triggerType == "TIME" }
             .forEach { trigger -> scheduleTimeTrigger(routine, trigger) }
     }
 
     private fun scheduleTimeTrigger(routine: Routine, trigger: Trigger) {
-        //Comprobamos que el dataWrapper no sea nulo.
         val dataWrapper = trigger.data ?: return
-        //Comprobamos que el mapa no sea nulo
         val mapData = dataWrapper.data ?: return
 
         val hour = mapData["hour"] as? Int
@@ -53,7 +60,6 @@ class AlarmScheduler @Inject constructor(
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
 
-            // Primero: ajustar para ocurrencias pasadas
             when (frequency) {
                 "daily" -> if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_MONTH, 1)
                 "weekly" -> {
@@ -68,7 +74,6 @@ class AlarmScheduler @Inject constructor(
                 "monthly" -> if (timeInMillis <= System.currentTimeMillis()) add(Calendar.MONTH, 1)
             }
 
-            // Segundo: ajustes adicionales según frecuencia
             when (frequency) {
                 "weekly" -> {
                     val daysOfWeek = mapData["daysOfWeek"] as? List<Int> ?: return@apply
@@ -88,7 +93,6 @@ class AlarmScheduler @Inject constructor(
         val alarmId = generateAlarmId(routine, trigger)
         val pendingIntent = createPendingIntent(routine, alarmId)
 
-        // Log usando la variable 'frequency' declarada fuera del apply
         Timber.d("Programando alarma $frequency para $hour:$minute (${routine.name}), id: $alarmId, time: ${calendar.time}")
 
         if (canScheduleExactAlarms()) {
@@ -99,7 +103,7 @@ class AlarmScheduler @Inject constructor(
         }
     }
 
-    fun cancel(routine: Routine) {
+    suspend fun cancel(routine: Routine) {
         Timber.d("Cancelando alarmas para la rutina: ${routine.uuid}, ${routine.name}")
         routine.triggers.filter { it.triggerType == "TIME" }.forEach { trigger ->
             cancelTimeTrigger(routine, trigger)
@@ -113,32 +117,17 @@ class AlarmScheduler @Inject constructor(
         Timber.d("Alarma cancelada para ${routine.name}, id: $alarmId")
     }
 
+    // CORRECTED: This function only generates the alarm ID
     private fun generateAlarmId(routine: Routine, trigger: Trigger): Int {
         // Combine routine UUID and a trigger identifier to create a unique ID
         return "${routine.uuid}-${trigger.uuid}".hashCode()
     }
 
-    // Now this method uses RoutineRepository to get the RoutineEntity
-    private suspend fun getRoutineEntityByUuid(uuid: String): RoutineEntity? {
-        Timber.d("Buscando rutina en la base de datos con UUID: $uuid")
-        val routine = routineRepository.getRoutineByUuid(uuid)
-        return routine?.let { // Convertir de Routine a RoutineEntity
-            RoutineEntity(
-                id = it.id,
-                uuid = it.uuid,
-                name = it.name,
-                description = it.description,
-                isEnabled = it.isEnabled,
-                createdDate = it.createdDate
-            )
-        }
-    }
-
+    // CORRECTED: This function creates the PendingIntent
     private fun createPendingIntent(routine: Routine, alarmId: Int): PendingIntent {
-        //  Obtener la RoutineEntity a partir del UUID.  Adaptar esto según tu implementación.
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId)
-            putExtra(AlarmReceiver.EXTRA_ROUTINE_UUID, routine.uuid)  // Pasar UUID
+            putExtra(AlarmReceiver.EXTRA_ROUTINE_UUID, routine.uuid) // Pasar UUID
         }
         return PendingIntent.getBroadcast(
             context,
@@ -147,6 +136,7 @@ class AlarmScheduler @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
+
 
     suspend fun rescheduleAll() {
         Timber.d("Reprogramando todas las alarmas...")
@@ -161,7 +151,7 @@ class AlarmScheduler @Inject constructor(
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             alarmManager.canScheduleExactAlarms()
         } else {
-            true // En versiones anteriores a Android 12, no hay restricciones
+            true
         }
     }
 }

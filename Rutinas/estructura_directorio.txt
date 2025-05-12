@@ -17,6 +17,7 @@ java/
                             TriggerDao.kt
                     model/
                         Action.kt
+                        ActionCategory.kt
                         ActionType.kt
                         ActionUi.kt
                         DataWrapper.kt
@@ -35,6 +36,7 @@ java/
                     RoutineExecutor.kt
                 receivers/
                     AlarmReceiver.kt
+                    AlarmStopperReceiver.kt
                 service/
                     NotificationService.kt
                 ui/
@@ -58,7 +60,7 @@ java/
                             EditTimeActionDialogFragment.kt
                             EditVolumeActionDialogFragment.kt
                         dialogs/
-                            ActionSelectionDialog.kt
+                            ActionCategoryDialog.kt
                             BaseDialog.kt
                             CalendarTriggerDialog.kt
                             LocationTriggerDialog.kt
@@ -69,6 +71,7 @@ java/
                         adapter/
                             ActionAdapter.kt
                             ActionCategoriesAdapter.kt
+                            ActionDiffCallback.kt
                             AppInfoAdapter.kt
                             RoutineAdapter.kt
                             TriggerAdapter.kt
@@ -118,6 +121,7 @@ res/
         ic_routine.xml
         ic_sound_mode.xml
         ic_status.xml
+        ic_stop.xml
         ic_time.xml
         ic_volume.xml
     layout/

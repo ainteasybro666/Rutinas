@@ -5,6 +5,7 @@ import android.content.Context
 import android.service.notification.StatusBarNotification
 import android.speech.tts.TextToSpeech
 import android.util.Log
+import timber.log.Timber
 import java.util.Locale
 
 class NotificationReader(private val context: Context) {
@@ -28,10 +29,10 @@ class NotificationReader(private val context: Context) {
     fun readNotifications(
         notifications: Array<StatusBarNotification>,
         excludedPackages: List<String>,
-        onComplete: () -> Unit
+        onComplete: () -> Unit,
     ) {
         if (!isInitialized) {
-            Log.w(TAG, "TTS no inicializado")
+            Timber.w("TTS no inicializado")
             onComplete()
             return
         }
@@ -48,7 +49,7 @@ class NotificationReader(private val context: Context) {
             }
 
         if (notificationsToRead.isEmpty()) {
-            Log.i(TAG, "No hay notificaciones para leer")
+            Timber.i("No hay notificaciones para leer")
             tts?.speak(
                 "No hay notificaciones pendientes",
                 TextToSpeech.QUEUE_FLUSH,
@@ -61,7 +62,7 @@ class NotificationReader(private val context: Context) {
 
         // Leer cada notificación
         notificationsToRead.forEachIndexed { index, text ->
-            Log.i(TAG, "Leyendo notificación $index: $text")
+            Timber.i("Leyendo notificación $index: $text")
             val queueMode = if (index == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
             tts?.speak(text, queueMode, null, "NOTIFICATION_$index")
         }
@@ -71,30 +72,30 @@ class NotificationReader(private val context: Context) {
 
     private fun shouldReadNotification(
         sbn: StatusBarNotification,
-        excludedPackages: List<String>
+        excludedPackages: List<String>,
     ): Boolean {
         // Excluir notificaciones del sistema
         if (isSystemNotification(sbn)) {
-            Log.d(TAG, "Notificación excluida (sistema): ${sbn.packageName}")
+            Timber.d("Notificación excluida (sistema): ${sbn.packageName}")
             return false
         }
 
         // Excluir notificaciones persistentes
         if (isOngoingNotification(sbn)) {
-            Log.d(TAG, "Notificación excluida (persistente): ${sbn.packageName}")
+            Timber.d("Notificación excluida (persistente): ${sbn.packageName}")
             return false
         }
 
         // Excluir notificaciones de paquetes específicos
         if (excludedPackages.contains(sbn.packageName)) {
-            Log.d(TAG, "Notificación excluida (lista de exclusión): ${sbn.packageName}")
+            Timber.d("Notificación excluida (lista de exclusión): ${sbn.packageName}")
             return false
         }
 
         // Verificar que la notificación tenga texto para leer
         val text = sbn.notification.extras.getString(Notification.EXTRA_TEXT)
         if (text.isNullOrBlank()) {
-            Log.d(TAG, "Notificación excluida (sin texto): ${sbn.packageName}")
+            Timber.d("Notificación excluida (sin texto): ${sbn.packageName}")
             return false
         }
 
@@ -111,20 +112,22 @@ class NotificationReader(private val context: Context) {
     }
 
     private fun logNotifications(notifications: Array<StatusBarNotification>) {
-        Log.d(TAG, "=== Notificaciones Activas ===")
+        Timber.d("=== Notificaciones Activas ===")
         notifications.forEach { sbn ->
             val packageName = sbn.packageName
             val title = sbn.notification.extras.getString(Notification.EXTRA_TITLE, "Sin título")
             val text = sbn.notification.extras.getString(Notification.EXTRA_TEXT, "Sin texto")
             val isOngoing = isOngoingNotification(sbn)
 
-            Log.d(TAG, """
+            Timber.tag(TAG).d(
+                """
                 Paquete: $packageName
                 Título: $title
                 Texto: $text
                 Persistente: $isOngoing
                 ===
-            """.trimIndent())
+            """.trimIndent()
+            )
         }
     }
 

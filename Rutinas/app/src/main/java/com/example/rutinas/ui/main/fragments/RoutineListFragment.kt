@@ -13,9 +13,11 @@ import com.example.rutinas.ui.common.BaseFragment
 import com.example.rutinas.ui.main.adapter.RoutineAdapter
 import com.example.rutinas.ui.viewmodel.RoutineListViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import android.app.AlertDialog // Import AlertDialog
 
 // Importar NavController
 import androidx.navigation.fragment.findNavController
+import com.example.rutinas.domain.Routine
 
 @AndroidEntryPoint
 class RoutineListFragment : BaseFragment() {
@@ -47,8 +49,12 @@ class RoutineListFragment : BaseFragment() {
                 viewModel.toggleRoutineStatus(routine.id, isChecked)
             },
             onRoutineClicked = { routine ->
-                // Manejar el clic en el item de la rutina
+                // Manejar el clic normal en el item de la rutina (edición)
                 navigateToEditRoutine(routine.uuid)
+            },
+            onRoutineLongClicked = { routine ->
+                // NEW: Handle long click (show delete option)
+                showDeleteRoutineDialog(routine)
             }
         )
         vb.rvRoutines.layoutManager = LinearLayoutManager(requireContext())
@@ -68,6 +74,21 @@ class RoutineListFragment : BaseFragment() {
         val action = RoutineListFragmentDirections.actionRoutineListFragmentToRoutineEditFragment(routineUuid = routineUuid)
         findNavController().navigate(action)
     }
+
+    // NEW: Function to show delete confirmation dialog
+    private fun showDeleteRoutineDialog(routine: Routine) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Eliminar Rutina")
+            .setMessage("¿Estás seguro de que quieres eliminar la rutina '${routine.name}'?")
+            .setPositiveButton("Eliminar") { dialog, which ->
+                // Call ViewModel to delete the routine
+                viewModel.deleteRoutine(routine) // NEW: Call the delete function in ViewModel
+            }
+            .setNegativeButton("Cancelar", null) // Dismiss the dialog on cancel
+            .setIcon(android.R.drawable.ic_dialog_alert) // Optional: Add an alert icon
+            .show()
+    }
+
 
     fun onPermissionGranted() {
         // Lógica para manejar permisos concedidos

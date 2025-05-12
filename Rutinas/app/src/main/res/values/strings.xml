@@ -20,5 +20,8 @@
     <string name="ringtone_volume">Volumen de tono</string>
     <string name="drag_handle_desc">botón para draggear</string>
     <string name="cancel">Cancelar</string>
+    <string name="delete">Eliminar</string>
+    <string name="edit">Editar</string>
+    <string name="duration_presets" />
 
 </resources>

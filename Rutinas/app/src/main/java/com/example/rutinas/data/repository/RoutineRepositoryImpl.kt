@@ -132,6 +132,26 @@ class RoutineRepositoryImpl @Inject constructor(
         Timber.d("Repository: Routine, triggers, and actions updated for ID: ${routine.id}")
     }
 
+    // NEW: Implement the deleteRoutine function
+    override suspend fun deleteRoutine(routine: Routine) {
+        Timber.d("Repository: Deleting routine with ID: ${routine.id} and UUID: ${routine.uuid}")
+
+        // 1. Delete associated triggers
+        Timber.d("Repository: Deleting triggers for routine ID: ${routine.id}")
+        triggerDao.deleteTriggersForRoutine(routine.id) // Assuming you have this DAO method
+
+        // 2. Delete associated actions
+        Timber.d("Repository: Deleting actions for routine ID: ${routine.id}")
+        actionDao.deleteActionsForRoutine(routine.id) // Assuming you have this DAO method
+
+        // 3. Delete the routine itself
+        Timber.d("Repository: Deleting the routine entity for ID: ${routine.id}")
+        routineDao.deleteRoutine(routine.toRoutineEntity()) // Assuming you have a delete method in RoutineDao
+
+        Timber.d("Repository: Routine and associated data deleted successfully for ID: ${routine.id}")
+    }
+
+
     // Implementa otras funciones de la interfaz RoutineRepository si hay más.
 
 }

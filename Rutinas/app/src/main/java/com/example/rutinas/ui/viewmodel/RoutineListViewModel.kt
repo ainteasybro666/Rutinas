@@ -29,4 +29,10 @@ class RoutineListViewModel @Inject constructor(
             repository.insertRoutine(routine)
         }
     }
+
+    fun deleteRoutine(routine: Routine) {
+        viewModelScope.launch {
+            repository.deleteRoutine(routine)
+        }
+    }
 }
