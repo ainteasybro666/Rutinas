@@ -13,6 +13,7 @@
         android:layout_height="wrap_content"
         android:padding="8dp">
 
+        <!-- Icono de la acción - A la izquierda -->
         <ImageView
             android:id="@+id/ivActionIcon"
             android:layout_width="40dp"
@@ -23,44 +24,56 @@
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent" />
 
-        <TextView
-            android:id="@+id/txtActionTitle"
-            android:layout_width="0dp"
+        <!-- Handle de arrastre - Al extremo derecho -->
+        <ImageButton
+            android:id="@+id/btnDragHandle"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textStyle="bold"
-            android:layout_marginStart="8dp"
+            android:src="@drawable/ic_drag_handle"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/drag_handle_desc"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toEndOf="@id/ivActionIcon"
-            app:layout_constraintEnd_toStartOf="@id/btnDeleteAction" />
+            app:layout_constraintBottom_toBottomOf="parent" />
 
-        <TextView
-            android:id="@+id/txtActionDescription"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:textSize="12sp"
-            android:layout_marginStart="8dp"
-            app:layout_constraintTop_toBottomOf="@id/txtActionTitle"
-            app:layout_constraintStart_toEndOf="@id/ivActionIcon"
-            app:layout_constraintEnd_toStartOf="@id/btnDeleteAction" />
-
+        <!-- Botón de eliminar - A la izquierda del handle de arrastre -->
         <ImageButton
             android:id="@+id/btnDeleteAction"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:importantForAccessibility="no"
-            app:icon="@drawable/ic_action"
+            app:srcCompat="@drawable/ic_delete"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
+            app:layout_constraintEnd_toStartOf="@id/btnDragHandle"
+            android:layout_marginEnd="8dp" />
 
-        <ImageButton
-            android:id="@+id/btnDragHandle"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_drag_handle"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/drag_handle_desc"/>
+        <!-- Título de la acción - A la derecha del icono, hasta el botón eliminar -->
+        <TextView
+            android:id="@+id/txtActionTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:textStyle="bold"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            app:layout_constraintTop_toTopOf="@id/ivActionIcon"
+            app:layout_constraintStart_toEndOf="@id/ivActionIcon"
+            app:layout_constraintEnd_toStartOf="@id/btnDeleteAction"
+            />
+
+        <!-- Descripción de la acción - Debajo del título, a la derecha del icono, hasta el botón eliminar -->
+        <TextView
+            android:id="@+id/txtActionDescription"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            app:layout_constraintTop_toBottomOf="@id/txtActionTitle"
+            app:layout_constraintStart_toEndOf="@id/ivActionIcon"
+            app:layout_constraintEnd_toStartOf="@id/btnDeleteAction"
+            />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.cardview.widget.CardView>

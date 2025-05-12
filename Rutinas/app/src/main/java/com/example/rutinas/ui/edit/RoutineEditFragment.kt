@@ -160,7 +160,7 @@ class RoutineEditFragment : BaseFragment(),
             onActionDeleted = { action -> viewModel.removeAction(action) },
             onActionClicked = ::navigateToEditAction // Mantener esta llamada para editar acción
         ).apply {
-            attachTouchHelper(vb.rvActions)
+            //attachTouchHelper(vb.rvActions)
         }
 
         vb.rvActions.apply {
@@ -288,42 +288,66 @@ class RoutineEditFragment : BaseFragment(),
     }
 
     private fun setupObservers() {
-        lifecycleScope.launch {
+        lifecycleScope.launch { // You are launching a coroutine in the lifecycleScope of the Fragment
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.currentRoutine.collect { routine ->
-                    Timber.d("Fragment: Routine loaded/updated in observer: $routine") // Log mejorado
-                    routine?.let {
-                        currentRoutineId = it.id
-                        vb.etRoutineName.setText(it.name) // Update routine name in UI
+                Timber.d("Fragment: Inside repeatOnLifecycle(Lifecycle.State.STARTED)") // Existing Log: Confirma que el bloque se activa
+
+                // Observe routine from ViewModel
+                launch { // Launch a new coroutine within the repeatOnLifecycle block for routine
+                    viewModel.currentRoutine.collect { routine ->
+                        Timber.d("Fragment: Routine loaded/updated in observer: $routine")
+                        routine?.let {
+                            currentRoutineId = it.id
+                            vb.etRoutineName.setText(it.name) // Update routine name in UI
+                        }
                     }
                 }
-            }
-            Timber.d("Fragment: Setting up triggers and actions list observers") // Log observers setup
 
-            // Observe triggers from ViewModel
-            lifecycleScope.launch {
-                viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+
+                Timber.d("Fragment: Setting up triggers and actions list observers") // Existing Log
+
+                // Observe triggers from ViewModel
+                launch { // Launch a new coroutine within the repeatOnLifecycle block for triggers
                     viewModel.triggers.collect { triggers ->
                         Timber.d("Trigger list updated: $triggers")
                         triggerAdapter.submitList(triggers.toList()) // Update the adapter
-                        Timber.d("Fragment: Submitted ${triggers.size} triggers to adapter") // Log submitList call
+                        Timber.d("Fragment: Submitted ${triggers.size} triggers to adapter")
                     }
                 }
-            }
 
-            lifecycleScope.launch {
-                viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Observe actions from ViewModel
+                launch { // Launch a new coroutine within the repeatOnLifecycle block for actions
                     viewModel.actions.collect { actions ->
-                        Timber.d("Action list updated: $actions")
-                        // Asegurarse de que la lista enviada es una nueva instancia para DiffUtil
-                        Timber.d("Fragment: Submitted ${actions.size} actions to adapter") // Log submitList call
-                        actionAdapter.submitList(actions.toList())
+                        try { // NEW: Start try block
+                            Timber.d("Action list updated: $actions") // Existing Log: Este log SÍ aparece
+                            Timber.d("Fragment: Action list received in observer BEFORE submitList: ${actions.size} items") // Existing Log: Should now appear before submitList
+
+                            // NEW Log: Check the current thread
+                            Timber.d("Fragment: Current thread in actions collect block: ${Thread.currentThread().name}")
+
+                            // NEW Log BEFORE submitList call
+                            Timber.d("Fragment: Calling submitList with ${actions.size} items")
+                            actionAdapter.submitList(actions.toList())
+                            // NEW Log AFTER submitList call
+                            Timber.d("Fragment: submitList called")
+
+                            // This log might appear out of order depending on the thread execution, or might not be reached
+                            // Timber.d("Fragment: Submitted ${actions.size} actions to adapter") // Keep if you want, but rely more on the logs around submitList
+
+                            // NEW Log: Check the item count immediately after submitList
+                            Timber.d("Fragment: ActionAdapter item count after submitList: ${actionAdapter.itemCount}")
+
+                            // NEW Log: Mark the end of the try block execution
+                            Timber.d("Fragment: End of actions collect block execution")
+
+                        } catch (e: Exception) { // NEW: Catch any exception
+                            Timber.e(e, "Fragment: Error in actions collect block") // NEW Log: Log the exception with stack trace
+                        }
                     }
                 }
-            }
 
-            lifecycleScope.launch {
-                viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Observe saveResult from ViewModel
+                launch { // Launch a new coroutine within the repeatOnLifecycle block for saveResult
                     viewModel.saveResult.collect { result ->
                         when (result) {
                             is Resource.Success<Long> -> {
@@ -345,6 +369,8 @@ class RoutineEditFragment : BaseFragment(),
             }
         }
     }
+
+
 
 
 

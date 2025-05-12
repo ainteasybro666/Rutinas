@@ -22,7 +22,7 @@ import java.util.UUID // Import UUID
 import javax.inject.Inject
 
 
-@HiltViewModel
+@HiltViewModel // Anotación si usas Hilt
 class RoutineEditViewModel @Inject constructor(
     private val repository: RoutineRepository
 ) : ViewModel() {
@@ -30,10 +30,12 @@ class RoutineEditViewModel @Inject constructor(
     private val _currentRoutine = MutableStateFlow<Routine?>(null)
     val currentRoutine: StateFlow<Routine?> = _currentRoutine.asStateFlow()
 
-    private val _actions = MutableStateFlow<MutableList<Action>>(mutableListOf()) // Usar MutableList
+    // Cambiar a StateFlow<List<Action>> (lista inmutable)
+    private val _actions = MutableStateFlow<List<Action>>(emptyList())
     val actions: StateFlow<List<Action>> = _actions.asStateFlow()
 
-    private val _triggers = MutableStateFlow<MutableList<Trigger>>(mutableListOf()) // Usar MutableList
+    // Cambiar a StateFlow<List<Trigger>> (lista inmutable)
+    private val _triggers = MutableStateFlow<List<Trigger>>(emptyList())
     val triggers: StateFlow<List<Trigger>> = _triggers.asStateFlow()
 
     private val _saveResult = MutableSharedFlow<Resource<Long>>()
@@ -48,8 +50,8 @@ class RoutineEditViewModel @Inject constructor(
             isNewRoutine = true
             val newUuid = UUID.randomUUID().toString()
             _currentRoutine.value = Routine(id = 0, uuid = newUuid, name = "", triggers = emptyList(), actions = emptyList())
-            _actions.value = mutableListOf() // Initial state for a new routine
-            _triggers.value = mutableListOf() // Initial state for triggers
+            _actions.value = emptyList() // Initial state for a new routine
+            _triggers.value = emptyList() // Initial state for triggers
             Timber.d("ViewModel: Initializing ViewModel for new routine with UUID: $newUuid") // Log initialization
         } else {
             // Editing existing routine
@@ -60,8 +62,8 @@ class RoutineEditViewModel @Inject constructor(
                 Timber.d("ViewModel: Repository returned routine: $routine") // Log repository result
                 if (routine != null) {
                     _currentRoutine.value = routine
-                    _triggers.value = routine.triggers.toMutableList() // Load existing triggers as MutableList
-                    _actions.value = routine.actions.toMutableList() // Load existing actions as MutableList
+                    _triggers.value = routine.triggers.toList() // Load existing triggers as immutable list
+                    _actions.value = routine.actions.toList() // Load existing actions as immutable list
                     Timber.d("Rutina cargada: $routine")
                 } else {
                     Timber.e("Routine with UUID $uuid not found.")
@@ -69,70 +71,63 @@ class RoutineEditViewModel @Inject constructor(
                     // Podrías emitir un error, navegar de regreso, etc.
                     // Por ahora, simplemente registramos el error y dejamos los StateFlows vacíos.
                     _currentRoutine.value = null // Indicar que no se cargó ninguna rutina
-                    _triggers.value = mutableListOf()
-                    _actions.value = mutableListOf()
+                    _triggers.value = emptyList()
+                    _actions.value = emptyList()
                 }
             }
         }
     }
 
-    // Modificado para usar MutableList y emitir la lista actualizada
+    // Modificado para usar listas inmutables y crear una nueva lista
     fun updateAction(updatedAction: Action) {
         Timber.d("ViewModel: updateAction called with: $updatedAction") // Log update call
-        val currentActions = _actions.value // Obtener la lista mutable actual
-        Timber.d("ViewModel: updateAction: Current actions before update: ${currentActions.map { it.uuid to it.executionOrder }}") // Log current state with UUIDs and order
-        val index = currentActions.indexOfFirst { it.uuid == updatedAction.uuid }
-        if (index != -1) {
-            currentActions[index] = updatedAction
-            _actions.value = currentActions.toMutableList() // Emitir una nueva instancia
-            Timber.d("updateAction: Action with UUID ${updatedAction.uuid} updated. New list: ${_actions.value}")
-        } else {
-            Timber.w("updateAction: Action with UUID ${updatedAction.uuid} not found in list.")
+        _actions.update { currentActions -> // Usar la función update
+            val index = currentActions.indexOfFirst { it.uuid == updatedAction.uuid }
+            if (index != -1) {
+                // Crear una nueva lista con el elemento actualizado
+                currentActions.toMutableList().apply { this[index] = updatedAction }.toList()
+            } else {
+                Timber.w("updateAction: Action with UUID ${updatedAction.uuid} not found in list.")
+                currentActions // Devolver la lista actual si no se encontró
+            }
         }
+        Timber.d("updateAction: Action with UUID ${updatedAction.uuid} updated. New list size: ${_actions.value.size}")
     }
-
 
     // Renamed and modified to be triggered by the adapter after a move
     // Ya usa MutableList, solo necesitamos emitir la lista reordenada
     fun onActionListReordered(reorderedActions: List<Action>) {
         Timber.d("ViewModel: Lista de acciones reordenada en el ViewModel: ${reorderedActions.map { it.uuid to it.executionOrder }}") // Log reordered list with UUIDs and order
-        // Asegurarse de que reorderedActions es un MutableList si necesitas mutarlo después
-        _actions.value = reorderedActions.toMutableList() // Update the ViewModel's list and emit
-        Timber.d("ViewModel actions updated after reorder: ${_actions.value}")
+        // Emitir la lista reordenada como un nuevo valor (lista inmutable)
+        _actions.value = reorderedActions.toList()
+        Timber.d("ViewModel actions updated after reorder: ${_actions.value.size}")
         // The saving of the new order happens when saveRoutine is called
     }
 
-
-    // Modificado para usar MutableList y emitir la lista actualizada
+    // Modificado para usar listas inmutables y crear una nueva lista
     fun removeAction(action: Action) {
         Timber.d("ViewModel: Eliminando acción: $action") // Log removal call
-        val currentActions = _actions.value
-        if (currentActions.remove(action)) { // Remove returns true if successful
-            // Re-index executionOrder after removing
-            currentActions.forEachIndexed { index, act -> act.executionOrder = index }
-            _actions.value = currentActions.toMutableList() // Emit a new instance
-            Timber.d("Acción eliminada de la lista del ViewModel: ${_actions.value}")
-        } else {
-            Timber.w("Attempted to remove an action that was not found: $action")
+        _actions.update { currentActions -> // Usar la función update
+            val updatedList = currentActions.filter { it.uuid != action.uuid }
+            // Re-index executionOrder after removing on the new list
+            updatedList.mapIndexed { index, act -> act.copy(executionOrder = index) }
         }
-        // Consider if you need to delete from the database immediately or only on save
-        // For now, we'll remove from the ViewModel's list
-        // If you need to delete from DB immediately: viewModelScope.launch { repository.deleteAction(action) }
+        Timber.d("Acción eliminada de la lista del ViewModel. Nueva lista size: ${_actions.value.size}")
     }
 
-    // Modificado para usar MutableList, generar UUID y devolver la acción añadida
-    fun addAction(action: Action): Action? { // Devuelve la acción añadida (con UUID)
-        Timber.d("ViewModel: addAction called with: $action") // Log add call
-        val currentActions = _actions.value
-        // Generar UUID solo si está vacío
+    // Modificado para usar listas inmutables, generar UUID y devolver la acción añadida
+    fun addAction(action: Action): Action { // Devuelve la acción añadida (con UUID) - asumimos que siempre se añade
+        Timber.d("ViewModel: addAction called with: ${action.actionType}") // Log add call
         val actionToAdd = if (action.uuid.isEmpty()) {
             action.copy(uuid = UUID.randomUUID().toString())
         } else {
             action // Usar el UUID existente si ya lo tiene
         }
-        currentActions.add(actionToAdd) // Usar actionToAdd aquí
-        _actions.value = currentActions.toMutableList() // Emitir una nueva instancia
-        Timber.d("Nueva acción con UUID añadida a la lista del ViewModel: ${_actions.value}")
+        // Crear una nueva lista con la acción añadida y emitir
+        _actions.update { currentActions ->
+            currentActions + actionToAdd
+        }
+        Timber.d("Nueva acción con UUID añadida a la lista del ViewModel: ${actionToAdd.uuid}. Lista total size: ${_actions.value.size}")
         return actionToAdd // Devuelve la acción añadida con el UUID
     }
 
@@ -153,6 +148,7 @@ class RoutineEditViewModel @Inject constructor(
             // Validaciones de triggers (usando el StateFlow del ViewModel)
             for (trigger in _triggers.value) { // Usa la lista de triggers del StateFlow
                 if (trigger.triggerType == "TIME") {
+                    // Obtener los datos de forma segura
                     val frequency = trigger.data.data["frequency"] as? String
                     val daysOfWeek = trigger.data.data["daysOfWeek"] as? List<Int>
                     val dayOfMonth = trigger.data.data["dayOfMonth"] as? Int
@@ -175,15 +171,17 @@ class RoutineEditViewModel @Inject constructor(
                 val routineToSave = currentRoutine.copy(
                     name = name,
                     // triggers y actions ya están en los StateFlows del ViewModel
-                    triggers = _triggers.value.toList(), // Usa la lista de triggers del StateFlow
-                    actions = _actions.value.toList() // Usa actions del ViewModel
+                    triggers = _triggers.value.toList(), // Usa la lista de triggers del StateFlow (ya es inmutable, pero toList crea una nueva instancia)
+                    actions = _actions.value.toList() // Usa actions del ViewModel (ya es inmutable, pero toList crea una nueva instancia)
                 )
 
                 val resultId = if (isNewRoutine) {
-                    repository.insertRoutine(routineToSave) // Asume que insertRoutine devuelve el ID (Long)
+                    val insertedId = repository.insertRoutine(routineToSave) // Asume que insertRoutine devuelve el ID (Long)
+                    Timber.d("ViewModel: Rutina insertada con ID: $insertedId")
+                    insertedId
                 } else {
                     Timber.d("ViewModel: Actualizando rutina existente con ID: ${routineToSave.id}") // Log update
-                    repository.updateRoutine(routineToSave) // Asume que updateRoutine actualiza y no devuelve nada o el ID
+                    repository.updateRoutine(routineToSave) // Asume que updateRoutine actualiza
                     routineToSave.id // Si es update, usa el ID existente
                 }
 
@@ -194,21 +192,20 @@ class RoutineEditViewModel @Inject constructor(
                 // Esto es importante para que las acciones/triggers añadidos después de guardar tengan el routineId correcto
                 if (isNewRoutine) {
                     Timber.d("Updating _currentRoutine with new ID: $resultId")
-                    // Asegurar que creamos una nueva instancia de Routine con el ID correcto
-                    _currentRoutine.value = routineToSave.copy(id = resultId, uuid = routineToSave.uuid) // Asegurar que el UUID también se mantiene
+                    // Asegurar que creamos una nueva instancia de Routine con el ID correcto y manteniendo el UUID
+                    _currentRoutine.value = routineToSave.copy(id = resultId, uuid = routineToSave.uuid)
 
                     // Also update the routineId for triggers and actions in the ViewModel's StateFlows
                     // This is crucial for adding new triggers/actions after the initial save
                     _triggers.update { currentList ->
-                        currentList.map { it.copy(routineId = resultId) }.toMutableList()
+                        currentList.map { it.copy(routineId = resultId) }.toList() // Usar toList() para emitir nueva instancia
                     }
                     _actions.update { currentList ->
-                        currentList.map { it.copy(routineId = resultId) }.toMutableList()
+                        currentList.map { it.copy(routineId = resultId) }.toList() // Usar toList() para emitir nueva instancia
                     }
 
                     isNewRoutine = false // Ya no es una rutina nueva después de guardar
                 }
-
 
                 Timber.d("Rutina guardada con éxito, ID: $resultId")
 
@@ -219,45 +216,44 @@ class RoutineEditViewModel @Inject constructor(
         }
     }
 
-
-    // Modificado para usar MutableList, generar UUID y devolver el trigger añadido
-    fun addTrigger(trigger: Trigger): Trigger? { // Devuelve el trigger añadido (con UUID)
-        Timber.d("ViewModel: addTrigger called with: $trigger") // Log add call
-        val currentTriggers = _triggers.value
+    // Modificado para usar listas inmutables, generar UUID y devolver el trigger añadido
+    fun addTrigger(trigger: Trigger): Trigger { // Devuelve el trigger añadido (con UUID) - asumimos que siempre se añade
+        Timber.d("ViewModel: addTrigger called with: ${trigger.triggerType}") // Log add call
         val triggerToAdd = if (trigger.uuid.isEmpty()) {
             trigger.copy(uuid = UUID.randomUUID().toString())
         } else {
             trigger
         }
-        currentTriggers.add(triggerToAdd)
-        _triggers.value = currentTriggers.toMutableList() // Emitir una nueva instancia
-        Timber.d("Trigger añadido a la lista del ViewModel: ${_triggers.value}")
+        // Crear una nueva lista con el trigger añadido y emitir
+        _triggers.update { currentTriggers ->
+            currentTriggers + triggerToAdd
+        }
+        Timber.d("Trigger añadido a la lista del ViewModel: ${triggerToAdd.uuid}. Lista total size: ${_triggers.value.size}")
         return triggerToAdd // Devuelve el trigger añadido con el UUID
     }
 
-    // Modificado para usar MutableList y emitir la lista actualizada
+    // Modificado para usar listas inmutables y crear una nueva lista
     fun removeTrigger(trigger: Trigger) {
         Timber.d("ViewModel: Eliminando trigger: $trigger") // Log removal call
-        val currentTriggers = _triggers.value
-        if(currentTriggers.remove(trigger)) { // Remove returns true if successful
-            _triggers.value = currentTriggers.toMutableList() // Emitir una nueva instancia
-            Timber.d("Trigger eliminado de la lista del ViewModel: ${_triggers.value}")
-        } else {
-            Timber.w("Attempted to remove a trigger that was not found: $trigger")
+        _triggers.update { currentTriggers -> // Usar la función update
+            currentTriggers.filter { it.uuid != trigger.uuid }
         }
+        Timber.d("Trigger eliminado de la lista del ViewModel. Nueva lista size: ${_triggers.value.size}")
     }
 
-    // Méto-do para actualizar un trigger existente (si necesitas esta funcionalidad)
+    // Méto-do para actualizar un trigger existente
     fun updateTrigger(updatedTrigger: Trigger) {
         Timber.d("ViewModel: updateTrigger called with: $updatedTrigger") // Log update call
-        val currentTriggers = _triggers.value
-        val index = currentTriggers.indexOfFirst { it.uuid == updatedTrigger.uuid }
-        if (index != -1) {
-            currentTriggers[index] = updatedTrigger
-            _triggers.value = currentTriggers.toMutableList() // Emitir una nueva instancia
-            Timber.d("updateTrigger: Trigger with UUID ${updatedTrigger.uuid} updated. New list: ${_triggers.value}")
-        } else {
-            Timber.w("updateTrigger: Trigger with UUID ${updatedTrigger.uuid} not found in list.")
+        _triggers.update { currentTriggers -> // Usar la función update
+            val index = currentTriggers.indexOfFirst { it.uuid == updatedTrigger.uuid }
+            if (index != -1) {
+                // Crear una nueva lista con el elemento actualizado
+                currentTriggers.toMutableList().apply { this[index] = updatedTrigger }.toList()
+            } else {
+                Timber.w("updateTrigger: Trigger with UUID ${updatedTrigger.uuid} not found in list.")
+                currentTriggers // Devolver la lista actual si no se encontró
+            }
         }
+        Timber.d("updateTrigger: Trigger with UUID ${updatedTrigger.uuid} updated. New list size: ${_triggers.value.size}")
     }
 }
