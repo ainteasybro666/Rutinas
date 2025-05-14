@@ -10,11 +10,11 @@ import com.example.rutinas.data.model.ActionType
 import com.example.rutinas.data.model.DataWrapper
 import com.example.rutinas.databinding.FragmentEditSoundModeActionBinding
 import com.example.rutinas.ui.edit.ActionDialogListener
+import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
 
-class EditSoundModeActionDialogFragment(listener: ActionDialogListener) : BaseEditActionDialogFragment(listener) {
-    private var _binding: FragmentEditSoundModeActionBinding? = null
-    private val binding get() = _binding!!
+@AndroidEntryPoint // Asegurarse que tiene la anotación
+class EditSoundModeActionDialogFragment(listener: ActionDialogListener) : BaseEditActionDialogFragment<FragmentEditSoundModeActionBinding>(listener) {
 
     companion object {
         fun newInstance(action: Action, listener: ActionDialogListener): EditSoundModeActionDialogFragment {
@@ -24,22 +24,22 @@ class EditSoundModeActionDialogFragment(listener: ActionDialogListener) : BaseEd
         }
     }
 
-    override fun inflateBinding(inflater: LayoutInflater, container: ViewGroup?): ViewBinding {
-        _binding = FragmentEditSoundModeActionBinding.inflate(inflater, container, false)
-        return binding
+    override fun inflateBinding(inflater: LayoutInflater, container: ViewGroup?): FragmentEditSoundModeActionBinding {
+        Timber.d("EditSoundModeActionDialogFragment: Inflating binding")
+        return FragmentEditSoundModeActionBinding.inflate(inflater, container, false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         Timber.d("EditSoundModeActionDialogFragment: onViewCreated() llamado")
-        loadActionData()
+        loadActionData(actionToEdit) // Usar actionToEdit
     }
 
-    private fun loadActionData() {
+    override fun loadActionData(action: Action?) { // Implementar método abstracto
         Timber.d("EditSoundModeActionDialogFragment: loadActionData() llamado")
         try {
-            action.data?.let { dataWrapper ->
-                dataWrapper.data.let { data ->
+            action?.data?.let { dataWrapper -> // Usar action?.data
+                dataWrapper.data.let { data -> // Usar dataWrapper
                     val value = data["value"] as? String ?: "NORMAL"
                     when (value) {
                         "NORMAL" -> binding.rbNormal.isChecked = true
@@ -53,8 +53,8 @@ class EditSoundModeActionDialogFragment(listener: ActionDialogListener) : BaseEd
         }
     }
 
-    override fun saveAction() {
-        Timber.d("EditSoundModeActionDialogFragment: saveAction() llamado")
+    override fun saveActionData(): Action { // Implementar método abstracto
+        Timber.d("EditSoundModeActionDialogFragment: saveActionData() llamado")
         try {
             val value = when (binding.radioGroupSoundMode.checkedRadioButtonId) {
                 binding.rbNormal.id -> "NORMAL"
@@ -63,24 +63,33 @@ class EditSoundModeActionDialogFragment(listener: ActionDialogListener) : BaseEd
                 else -> "NORMAL"
             }
 
-            val updatedAction = action.copy(
+            val updatedAction = actionToEdit.copy( // Usar actionToEdit
                 actionType = ActionType.SOUND_MODE,
                 data = DataWrapper(
                     mapOf(
                         "value" to value
-                    )
+                    ) as MutableMap<String, Any> // Añadir cast
                 )
             )
-            notifyActionUpdated(updatedAction)
+            return updatedAction
             Timber.d("EditSoundModeActionDialogFragment: Acción actualizada y notificada")
         } catch (e: Exception) {
             Timber.e("EditSoundModeActionDialogFragment: Error al guardar acción - ${e.message}")
+            throw e // Relanzar la excepción
         }
     }
 
-    override fun onDestroyView() {
-        Timber.d("EditSoundModeActionDialogFragment: onDestroyView() llamado")
-        super.onDestroyView()
-        _binding = null
+    // Implementar onSaveAction
+    override fun onSaveAction() {
+        Timber.d("EditSoundModeActionDialogFragment: onSaveAction() llamado")
+        try {
+            val updatedAction = saveActionData()
+            notifyActionUpdated(updatedAction)
+            Timber.d("EditSoundModeActionDialogFragment: Action updated and notified")
+            dismiss()
+        } catch (e: Exception) {
+            Timber.e("EditSoundModeActionDialogFragment: Error saving action - ${e.message}")
+            showErrorDialog("Error al guardar la acción: ${e.message}")
+        }
     }
 }

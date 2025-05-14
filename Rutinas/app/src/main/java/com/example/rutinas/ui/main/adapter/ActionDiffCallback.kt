@@ -1,7 +1,7 @@
-package com.example.rutinas.ui.main.adapter // Asegúrate de que este sea el paquete correcto donde colocas el archivo
+package com.example.rutinas.ui.main.adapter
 
 import androidx.recyclerview.widget.DiffUtil
-import com.example.rutinas.data.model.Action // Asegúrate de que esta sea la ruta correcta a tu clase Action
+import com.example.rutinas.data.model.Action
 import timber.log.Timber // Asegúrate de tener la dependencia de Timber y la inicialización en tu Application class
 
 class ActionDiffCallback : DiffUtil.ItemCallback<Action>() {

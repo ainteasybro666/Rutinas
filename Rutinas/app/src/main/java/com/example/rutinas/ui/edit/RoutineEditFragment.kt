@@ -225,10 +225,8 @@ class RoutineEditFragment : BaseFragment(),
     }
 
     // Function to get the appropriate dialog fragment for an action (used for editing existing actions)
-    private fun getDialogFragmentForAction(action: Action): BaseEditActionDialogFragment {
+    private fun getDialogFragmentForAction(action: Action): BaseEditActionDialogFragment<*> { // Use <*> for wildcard
         Timber.d("Getting dialog fragment for existing action: $action")
-        // Ya no creamos una nueva acción aquí.
-        // Siempre usamos la acción que nos llega, que debe tener un UUID si se llama desde navigateToEditAction.
         return when (action.actionType) {
             ActionType.ANNOUNCEMENT -> EditAnnouncementActionDialogFragment.newInstance(action, this)
             ActionType.ALARM -> EditAlarmActionDialogFragment.newInstance(action, this)
@@ -239,7 +237,7 @@ class RoutineEditFragment : BaseFragment(),
             ActionType.TIME -> EditTimeActionDialogFragment.newInstance(action, this)
             ActionType.VOLUME -> EditVolumeActionDialogFragment.newInstance(action, this)
             else -> throw IllegalArgumentException("Unknown action type: ${action.actionType}")
-        } as BaseEditActionDialogFragment
+        }
     }
 
 

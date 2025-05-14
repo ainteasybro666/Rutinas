@@ -14,12 +14,13 @@ import com.example.rutinas.databinding.FragmentEditReadNotificationsActionBindin
 import com.example.rutinas.ui.edit.ActionDialogListener
 import com.example.rutinas.ui.edit.RoutineEditFragment
 import com.example.rutinas.ui.main.adapter.AppInfoAdapter
+import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
 
+@AndroidEntryPoint // Asegurarse que tiene la anotación
 class EditReadNotificationsActionDialogFragment(listener: ActionDialogListener) :
-    BaseEditActionDialogFragment(listener) {
-    private var _binding: FragmentEditReadNotificationsActionBinding? = null
-    private val binding get() = _binding!!
+    BaseEditActionDialogFragment<FragmentEditReadNotificationsActionBinding>(listener) {
+
     private lateinit var appAdapter: AppInfoAdapter
     private var appList: MutableList<AppInfo> = mutableListOf()
 
@@ -37,16 +38,15 @@ class EditReadNotificationsActionDialogFragment(listener: ActionDialogListener) 
     override fun inflateBinding(
         inflater: LayoutInflater,
         container: ViewGroup?
-    ): ViewBinding {
-        _binding = FragmentEditReadNotificationsActionBinding.inflate(inflater, container, false)
-        return binding
+    ): FragmentEditReadNotificationsActionBinding { // Cambiar tipo de retorno
+        return FragmentEditReadNotificationsActionBinding.inflate(inflater, container, false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         Timber.d("EditReadNotificationsActionDialogFragment: onViewCreated() llamado")
         setupRecyclerView()
-        loadActionData()
+        loadActionData(actionToEdit) // Usar actionToEdit
     }
 
     private fun setupRecyclerView() {
@@ -71,12 +71,12 @@ class EditReadNotificationsActionDialogFragment(listener: ActionDialogListener) 
         }
     }
 
-    fun loadActionData() {
+    override fun loadActionData(action: Action?) { // Implementar método abstracto
         Timber.d("EditReadNotificationsActionDialogFragment: loadActionData() llamado")
         try {
             val newAppList = getAppList().toMutableList()
-            action.data?.let { dataWrapper ->
-                dataWrapper.data.let { data ->
+            action?.data?.let { dataWrapper -> // Usar action?.data y actionToLoad si usas el parámetro
+                dataWrapper.data.let { data -> // Usar dataWrapper
                     val selectedApps = data["selectedApps"] as? List<String> ?: emptyList()
                     newAppList.forEach { appInfo ->
                         appInfo.selected = selectedApps.contains(appInfo.packageName)
@@ -91,28 +91,37 @@ class EditReadNotificationsActionDialogFragment(listener: ActionDialogListener) 
         }
     }
 
-    override fun saveAction() {
-        Timber.d("EditReadNotificationsActionDialogFragment: saveAction() llamado")
+    override fun saveActionData(): Action { // Implementar método abstracto
+        Timber.d("EditReadNotificationsActionDialogFragment: saveActionData() llamado")
         try {
             val selectedApps = appList.filter { it.selected }.map { it.packageName }
-            val updatedAction = action.copy(
+            val updatedAction = actionToEdit.copy( // Usar actionToEdit
                 actionType = ActionType.READ_NOTIFICATIONS,
                 data = DataWrapper(
                     mapOf(
                         "selectedApps" to selectedApps
-                    )
+                    ) as MutableMap<String, Any> // Añadir cast
                 )
             )
-            notifyActionUpdated(updatedAction)
+            return updatedAction
             Timber.d("EditReadNotificationsActionDialogFragment: Acción actualizada y notificada")
         } catch (e: Exception) {
             Timber.e("EditReadNotificationsActionDialogFragment: Error al guardar acción - ${e.message}")
+            throw e // Relanzar la excepción
         }
     }
 
-    override fun onDestroyView() {
-        Timber.d("EditReadNotificationsActionDialogFragment: onDestroyView() llamado")
-        super.onDestroyView()
-        _binding = null
+    // Implementar onSaveAction
+    override fun onSaveAction() {
+        Timber.d("EditReadNotificationsActionDialogFragment: onSaveAction() llamado")
+        try {
+            val updatedAction = saveActionData()
+            notifyActionUpdated(updatedAction)
+            Timber.d("EditReadNotificationsActionDialogFragment: Action updated and notified")
+            dismiss()
+        } catch (e: Exception) {
+            Timber.e("EditReadNotificationsActionDialogFragment: Error saving action - ${e.message}")
+            showErrorDialog("Error al guardar la acción: ${e.message}")
+        }
     }
 }

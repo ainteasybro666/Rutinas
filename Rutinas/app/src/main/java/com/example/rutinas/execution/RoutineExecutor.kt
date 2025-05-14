@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
@@ -24,7 +25,9 @@ import com.example.rutinas.data.model.Action
 import com.example.rutinas.data.model.ActionType
 import com.example.rutinas.domain.Routine
 import com.example.rutinas.receivers.AlarmStopperReceiver
+import com.example.rutinas.routines.execution.RoutineExecutionListener
 import com.example.rutinas.service.NotificationService
+import com.example.rutinas.service.RoutineExecutionService
 import com.example.rutinas.utils.NotificationReader
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -39,10 +42,20 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+import javax.inject.Singleton // Potentially use Singleton scope if appropriate
+import kotlinx.coroutines.*
 
 class RoutineExecutor @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+
+    private var routineExecutionListener: RoutineExecutionListener? = null // Make it nullable
+
+    // Method to set the listener AFTER the executor is constructed via Hilt
+    fun setListener(listener: RoutineExecutionListener) {
+        this.routineExecutionListener = listener
+        Timber.d("RoutineExecutor: Listener set.")
+    }
 
     companion object {
         private const val CHANNEL_ID = "RoutineNotifications"
@@ -58,6 +71,7 @@ class RoutineExecutor @Inject constructor(
     private val handler = Handler(Looper.getMainLooper()) // Use a single handler
     // Consider using a ScheduledExecutorService for more robust repetition handling
     private var repetitionScheduler: ScheduledExecutorService? = null
+    private var currentRoutine: Routine? = null // Keep track of the currently executing routine
 
     // Define duration constants in milliseconds
     private val DURATION_SHORTEST_MS = 10 * 1000L // 10 seconds
@@ -68,7 +82,12 @@ class RoutineExecutor @Inject constructor(
 
     // Notification Channel ID for the alarm notification
     private val ALARM_NOTIFICATION_CHANNEL_ID = "alarm_channel_id"
-    private val ALARM_NOTIFICATION_ID = 12345 // A unique ID for the alarm notification
+    private val ALARM_NOTIFICATION_ID = 66612 // A unique ID for the alarm notification
+
+    // Coroutine scope for routine execution
+    // Use a SupervisorJob so that if one action coroutine fails, others can continue
+    private val routineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
 
     init {
         createNotificationChannel()
@@ -80,29 +99,59 @@ class RoutineExecutor @Inject constructor(
         Timber.d("RoutineExecutor: executeRoutine called")
         Timber.i("RoutineExecutor: Executing routine: ${routine.name} (${routine.uuid}), triggered by alarmId: $alarmId")
 
-        val handler = Handler(Looper.getMainLooper())
-        CoroutineScope(Dispatchers.Main).launch {
+        currentRoutine = routine // Store the current routine
+
+        // Notify listener that routine execution has started (check if listener is set)
+        routineExecutionListener?.onRoutineExecutionStart(routine.id)
+
+
+        // Use the routineScope for executing actions
+        routineScope.launch {
             for (action in routine.actions) {
-                runCatching { executeAction(action, handler) }
-                    .onFailure { Timber.e(it, "Error executing action: $action") }
+                Timber.d("RoutineExecutor: Attempting to execute action: ${action.actionType}")
+                // Notify listener that an action is starting (check if listener is set)
+                routineExecutionListener?.onActionStarted(action)
+
+                // Execute the action
+                runCatching {
+                    // The actual execution logic for each action type goes here
+                    // Call your existing executeAction function
+                    executeAction(action, handler) // Pass the handler if needed by specific actions
+                }
+                    .onSuccess {
+                        Timber.d("RoutineExecutor: Action ${action.actionType} finished successfully.")
+                        // Notify listener that the action finished successfully (check if listener is set)
+                        routineExecutionListener?.onActionFinished(action.actionType, true)
+                    }
+                    .onFailure {
+                        Timber.e(it, "Error executing action: ${action.actionType}")
+                        // Notify listener that the action failed (check if listener is set)
+                        routineExecutionListener?.onActionFinished(action.actionType, false)
+                        // Decide if you want to stop the whole routine on failure or continue
+                        // For now, let's continue with the next action
+                    }
             }
             Timber.i("RoutineExecutor: Finished executing routine: ${routine.name}")
+            // Notify listener that routine execution has finished (check if listener is set)
+            routineExecutionListener?.onRoutineExecutionFinished(routine.id, true) // Assuming success if all actions attempted
+            currentRoutine = null // Clear current routine
         }
     }
 
+    // Your existing suspend function for executing actions
     private suspend fun executeAction(action: Action, handler: Handler) {
-        Timber.d("RoutineExecutor: executeAction called")
-        Timber.d("RoutineExecutor: Executing action: ${action.actionType}, data: ${action.data}, action id: ${action.uuid}")
-        val actionType = action.actionType
-        when (actionType) {
-            ActionType.ALARM -> handleAlarmAction(action.data?.data)
-            ActionType.ANNOUNCEMENT -> handleAnnouncementAction(action.data?.data, handler)
-            ActionType.BRIGHTNESS -> handleBrightnessAction(action.data?.data)
-            ActionType.READ_NOTIFICATIONS -> handleReadNotificationsAction(action.data?.data)
-            ActionType.SOUND_MODE -> handleSoundModeAction(action.data?.data)
+        Timber.d("RoutineExecutor: executeAction called for type: ${action.actionType}")
+        // Access data safely using action.data?.data if your DataWrapper requires it
+        val actionData = action.data?.data
+        when (action.actionType) {
+            ActionType.ALARM -> handleAlarmAction(actionData)
+            ActionType.ANNOUNCEMENT -> handleAnnouncementAction(actionData, handler)
+            ActionType.BRIGHTNESS -> handleBrightnessAction(actionData)
+            ActionType.READ_NOTIFICATIONS -> handleReadNotificationsAction(actionData)
+            ActionType.SOUND_MODE -> handleSoundModeAction(actionData)
+            // Note: If handleTimeAction doesn't need data, keep the call as you had it
             ActionType.TIME -> handleTimeAction(handler)
-            ActionType.VOLUME -> handleVolumeAction(action.data?.data)
-            ActionType.PAUSE -> handlePauseAction(action)
+            ActionType.PAUSE -> handlePauseAction(action) // Pass the whole action if needed
             // ADD other action types here as you implement them
             else -> Timber.w("RoutineExecutor: Unknown action type: ${action.actionType}")
         }
@@ -111,23 +160,55 @@ class RoutineExecutor @Inject constructor(
     private fun handleAlarmAction(data: Map<String, Any>?) {
         Timber.d("RoutineExecutor: handleAlarmAction called with data: $data")
 
-        // Get duration preset and repetition count from data
-        val durationPreset = data?.get("durationPreset") as? String ?: "normal" // Default to "normal"
-        val repetitionsCount = (data?.get("repetitionsCount") as? String)?.toIntOrNull() ?: 1 // Default to 1
+        // --- Get data from the DataWrapper ---
+        // Get Alarm Sound URI
+        val alarmSoundUriString = data?.get("alarmSoundUri") as? String
+        val alarmSound: Uri = if (!alarmSoundUriString.isNullOrBlank()) {
+            try {
+                Uri.parse(alarmSoundUriString)
+            } catch (e: Exception) {
+                Timber.e(e, "RoutineExecutor: Error parsing saved alarm sound URI. Using default.")
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            }
+        } else {
+            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        }
 
-        // Determine duration in milliseconds based on preset
-        val durationMs = when (durationPreset) {
+        val stopOnTap = (data?.get("stopOnTap") as? String).toBoolean()
+
+        // Get Only Vibration state
+        val onlyVibration = (data?.get("onlyVibration") as? String).toBoolean()
+
+        // Get Ignore DND state
+        val ignoreDnd = (data?.get("ignoreDnd") as? String).toBoolean()
+
+        // Get Duration (assuming it's a String preset or custom value)
+        val durationString = data?.get("duration") as? String ?: "normal" // Default to "normal"
+
+        // Determine duration in milliseconds based on the saved value
+        val durationMs = when (durationString) {
             "más corta" -> DURATION_SHORTEST_MS
             "corta" -> DURATION_SHORT_MS
             "normal" -> DURATION_NORMAL_MS
             "larga" -> DURATION_LONG_MS
             "más larga" -> DURATION_LONGER_MS
-            else -> DURATION_NORMAL_MS // Fallback to normal if preset is unknown
+            else -> {
+                Timber.w("RoutineExecutor: Unknown duration preset or invalid custom duration: $durationString. Using normal.")
+                DURATION_NORMAL_MS
+            }
         }
 
-        Timber.i("RoutineExecutor: Executing ALARM action - duration: $durationPreset ($durationMs ms), repetitions: $repetitionsCount")
+        // Get Repetitions (assuming it's a String preset or custom value)
+        val repetitionsString = data?.get("repetitions") as? String ?: "1" // Default to "1"
+        val repetitionsCount = repetitionsString.toIntOrNull() ?: 1 // Default to 1 if parsing fails
 
-        // Get Vibrator and Ringtone
+        // Get Action Label
+        val actionLabel = data?.get("actionLabel") as? String ?: "Alarma de Rutina"
+        // --- End of getting data ---
+
+        Timber.i("RoutineExecutor: Executing ALARM action - Label: $actionLabel, Sound URI: $alarmSound, Only Vibration: $onlyVibration, Ignore DND: $ignoreDnd, Stop on Tap: $stopOnTap, Duration: $durationString ($durationMs ms), Repetitions: $repetitionsCount")
+
+        // Get Vibrator
         vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
             vibratorManager?.defaultVibrator
@@ -136,126 +217,253 @@ class RoutineExecutor @Inject constructor(
             context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         }
 
-        val alarmSound: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        // --- Handle Ignore DND ---
+        var originalNotificationPolicyAccess: Boolean = false // Flag to indicate if we modified the policy
+        var originalInterruptionFilter: Int = -1 // To store the original DND filter
 
-        // Play Ringtone
-        mediaPlayer = MediaPlayer().apply {
-            try {
-                setDataSource(context, alarmSound)
-                setAudioStreamType(AudioManager.STREAM_ALARM)
-                isLooping = true // Loop the alarm sound
-                prepare()
-                start()
-                Timber.d("RoutineExecutor: Alarm sound started.")
-            } catch (e: Exception) {
-                Timber.e(e, "RoutineExecutor: Error playing alarm sound.")
+        if (ignoreDnd && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            if (notificationManager?.isNotificationPolicyAccessGranted == true) {
+                try {
+                    originalInterruptionFilter = notificationManager.currentInterruptionFilter // Save original state
+                    // Set filter to allow alarms (this is a basic approach)
+                    notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALARMS)
+                    originalNotificationPolicyAccess = true // Indicate that we modified the policy
+                    Timber.d("RoutineExecutor: Temporarily set interruption filter to ALARMS.")
+                } catch (e: Exception) {
+                    Timber.e(e, "RoutineExecutor: Error changing interruption filter for DND.")
+                    // Continue execution, but without ignoring DND
+                }
+            } else {
+                Timber.w("RoutineExecutor: ACCESS_NOTIFICATION_POLICY permission not granted. Cannot ignore DND.")
             }
         }
 
-        // Vibrate
-        vibrator?.let { vib ->
-            val pattern = longArrayOf(0, 1000, 1000) // Start immediately, vibrate 1s, pause 1s
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val effect = VibrationEffect.createWaveform(pattern, 0) // Loop the pattern
-                vib.vibrate(effect)
-                Timber.d("RoutineExecutor: Vibration started (Waveform).")
-            } else {
-                @Suppress("DEPRECATION")
-                vib.vibrate(pattern, 0) // Loop the pattern
-                Timber.d("RoutineExecutor: Vibration started (Pattern).")
+        // --- Play Ringtone (if not only vibration) ---
+        if (!onlyVibration) {
+            mediaPlayer = MediaPlayer().apply {
+                try {
+                    setDataSource(context, alarmSound)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_ALARM)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .build()
+                        )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        setAudioStreamType(AudioManager.STREAM_ALARM)
+                    }
+                    isLooping = true // Loop the alarm sound
+                    prepare()
+                    start()
+                    Timber.d("RoutineExecutor: Alarm sound started.")
+                } catch (e: Exception) {
+                    Timber.e(e, "RoutineExecutor: Error playing alarm sound.")
+                    // Handle error: Should a sound failure stop the whole action?
+                    // For now, we log and continue, allowing vibration (if applicable) to proceed.
+                    // You might want to notify the listener of a partial failure or the whole action failure.
+                    // routineExecutionListener?.onActionFinished(ActionType.ALARM, false) // Example of notifying failure
+                }
             }
-        } ?: Timber.w("RoutineExecutor: Vibrator not available.")
+        } else {
+            Timber.d("RoutineExecutor: Only vibration is true, not playing sound.")
+        }
+
+
+        // --- Vibrate ---
+        // Always vibrate if onlyVibration is true, or if sound is playing (default vibration)
+        if (onlyVibration || mediaPlayer?.isPlaying == true) {
+            vibrator?.let { vib ->
+                // Using a default vibration pattern if onlyVibration is true or if sound is playing
+                val patternToUse = longArrayOf(0, 1000, 1000) // Start immediately, vibrate 1s, pause 1s
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val effect = VibrationEffect.createWaveform(patternToUse, 0) // Loop the pattern
+                    vib.vibrate(effect)
+                    Timber.d("RoutineExecutor: Vibration started (Waveform) with default pattern.")
+                } else {
+                    @Suppress("DEPRECATION")
+                    vib.vibrate(patternToUse, 0) // Loop the pattern
+                    Timber.d("RoutineExecutor: Vibration started (Pattern) with default pattern.")
+                }
+            } ?: Timber.w("RoutineExecutor: Vibrator not available.")
+        } else {
+            Timber.d("RoutineExecutor: Neither sound is playing nor only vibration is true. Not vibrating.")
+        }
 
 
         // Show Alarm Notification
-        val label = data?.get("label") as? String ?: "Alarma de Rutina"
-        showAlarmNotification(label)
+        showAlarmNotification(actionLabel) // Use the saved action label
 
+        // ** Handle Stop on Tap based on state and permission **
+        if (stopOnTap) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+                Timber.w("RoutineExecutor: Cannot enable Stop on Tap - SYSTEM_ALERT_WINDOW permission not granted.")
+                // Inform the user about the missing permission and how to grant it
+                displayPermissionRequiredNotification(
+                    "Permiso de Superposición Necesario",
+                    "Para la función 'Detener al Tocar' de la alarma, necesitas conceder el permiso 'Permiso para dibujar sobre otras aplicaciones'.",
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION // Intent action to overlay settings
+                )
+                // You might want to inform the listener that Stop on Tap could NOT be enabled
+                // routineExecutionListener?.onStopOnTapEnableFailed() // Optional: Add this method to listener
+            } else {
+                // Permission is granted or not needed (API < M), proceed to enable Stop on Tap
+                routineExecutionListener?.onEnableStopOnTap()
+                Timber.d("RoutineExecutor: Stop on Tap is enabled. Notifying listener.")
+            }
+        }
 
-        // Schedule the stop logic
+        // Schedule the stop logic using ScheduledExecutorService
         repetitionScheduler?.shutdownNow() // Cancel any previous scheduler
         repetitionScheduler = Executors.newSingleThreadScheduledExecutor()
 
-        val stopTask = Runnable {
-            Timber.d("RoutineExecutor: Scheduled stop task triggered.")
-            // Stop the current sound/vibration cycle but keep the scheduler alive for the next repetition
-            mediaPlayer?.let {
-                if (it.isPlaying) {
-                    it.stop()
-                    it.prepareAsync() // Prepare for the next start
-                    Timber.d("RoutineExecutor: Alarm sound stopped for repetition pause.")
-                }
-            }
-            vibrator?.cancel() // Cancel vibration
-            Timber.d("RoutineExecutor: Vibration stopped for repetition pause.")
+        // Within handleAlarmAction, define the runnables like this:
 
-            // The next repetition will be scheduled by the scheduler itself
+        val stopTask = Runnable {
+            Timber.d("RoutineExecutor: Scheduled stop task triggered for a repetition cycle.")
+            val player = mediaPlayer // Use a local variable for clarity
+
+            if (player != null && player.isPlaying) {
+                try {
+                    player.stop()
+                    if (repetitionScheduler != null && !repetitionScheduler!!.isShutdown) {
+                        try {
+                            player.prepareAsync()
+                            Timber.d("RoutineExecutor: MediaPlayer prepared for next start.")
+                        } catch (e: Exception) {
+                            Timber.e(e, "RoutineExecutor: Error preparing MediaPlayer for next start.")
+                            routineExecutionListener?.onActionFinished(ActionType.ALARM, false)
+                            repetitionScheduler?.shutdownNow()
+                            repetitionScheduler = null
+                        }
+                    } else {
+                        player.release()
+                        mediaPlayer = null
+                        Timber.d("RoutineExecutor: MediaPlayer released as no more repetitions planned.")
+                    }
+                    Timber.d("RoutineExecutor: Alarm sound stopped for repetition pause.")
+                } catch (e: Exception) {
+                    Timber.e(e, "RoutineExecutor: Error stopping MediaPlayer.")
+                }
+            } else {
+                Timber.d("RoutineExecutor: MediaPlayer not playing, no need to stop.")
+            }
+
+            vibrator?.cancel()
+            Timber.d("RoutineExecutor: Vibration stopped for repetition pause.")
         }
 
         val startTask = Runnable {
             Timber.d("RoutineExecutor: Scheduled start task triggered for repetition.")
-            // Restart sound and vibration
-            mediaPlayer?.start() // Start playing again
-            vibrator?.let { vib ->
-                val pattern = longArrayOf(0, 1000, 1000) // Start immediately, vibrate 1s, pause 1s
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    val effect = VibrationEffect.createWaveform(pattern, 0) // Loop the pattern
-                    vib.vibrate(effect)
-                } else {
-                    @Suppress("DEPRECATION")
-                    vib.vibrate(pattern, 0) // Loop the pattern
-                }
+            val player = mediaPlayer
+            val vibratorObj = vibrator // Use a local variable
+
+            if (!onlyVibration) {
+                player?.let {
+                    try {
+                        it.start()
+                        Timber.d("RoutineExecutor: Alarm sound restarted for repetition.")
+                    } catch (e: Exception) {
+                        Timber.e(e, "RoutineExecutor: Error starting MediaPlayer for repetition.")
+                        routineExecutionListener?.onActionFinished(ActionType.ALARM, false)
+                        repetitionScheduler?.shutdownNow()
+                        repetitionScheduler = null
+                    }
+                } ?: Timber.w("RoutineExecutor: MediaPlayer is null, cannot restart sound for repetition.")
+            } else {
+                Timber.d("RoutineExecutor: Only vibration is true, not restarting sound.")
+            }
+
+            if (onlyVibration || (player != null && player.isPlaying)) {
+                vibratorObj?.let { vib ->
+                    val patternToUse = longArrayOf(0, 1000, 1000)
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            val effect = VibrationEffect.createWaveform(patternToUse, 0)
+                            vib.vibrate(effect)
+                            Timber.d("RoutineExecutor: Vibration restarted (Waveform) for repetition with default pattern.")
+                        } else {
+                            @Suppress("DEPRECATION")
+                            vib.vibrate(patternToUse, 0)
+                            Timber.d("RoutineExecutor: Vibration restarted (Pattern) for repetition with default pattern.")
+                        }
+                    } catch (e: Exception) {
+                        Timber.e(e, "RoutineExecutor: Error vibrating for repetition.")
+                    }
+                } ?: Timber.w("RoutineExecutor: Vibrator not available for repetition.")
+            } else {
+                Timber.d("RoutineExecutor: Neither sound is starting nor only vibration is true for repetition. Not vibrating.")
             }
         }
 
         // Define the pause duration between repetitions
-        val pauseBetweenRepetitionsMs = DURATION_NORMAL_MS // Using normal duration as the pause
-
+        val pauseBetweenRepetitionsMs = DURATION_NORMAL_MS
 
         // Schedule the first stop after durationMs
+        Timber.d("RoutineExecutor: Scheduling initial stop in ${durationMs}ms.")
         repetitionScheduler?.schedule(stopTask, durationMs, TimeUnit.MILLISECONDS)
 
-        // Schedule subsequent start and stop tasks for repetitions
+
+        // Schedule subsequent cycles for repetitions
         if (repetitionsCount > 1) {
-            // Schedule (repetitionsCount - 1) more cycles
             for (i in 1 until repetitionsCount) {
-                val nextStartTime = (durationMs + (i - 1) * (DURATION_NORMAL_MS + durationMs)) // Example: Stop, pause (e.g., 1 min), Start again
-                val nextStopTime = nextStartTime + durationMs // Stop after durationMs again
+                val delayForNextCycleStart = durationMs + (i - 1) * (durationMs + pauseBetweenRepetitionsMs) + pauseBetweenRepetitionsMs
+                val delayForNextCycleStop = delayForNextCycleStart + durationMs
+                Timber.d("RoutineExecutor: Scheduling repetition ${i + 1}: Start in ${delayForNextCycleStart}ms, Stop in ${delayForNextCycleStop}ms.")
 
-                // Simple example: Stop, wait DURATION_NORMAL_MS, then start again for durationMs
-                // You might want a fixed pause time instead of DURATION_NORMAL_MS
-                val pauseBetweenRepetitionsMs = DURATION_NORMAL_MS // Or a different value
-
-                repetitionScheduler?.schedule(stopTask, (durationMs + i * (durationMs + pauseBetweenRepetitionsMs)), TimeUnit.MILLISECONDS)
-                repetitionScheduler?.schedule(startTask, (durationMs + i * (durationMs + pauseBetweenRepetitionsMs) + pauseBetweenRepetitionsMs), TimeUnit.MILLISECONDS)
-
-                Timber.d("RoutineExecutor: Scheduled repetition ${i + 1}: Start in ${nextStartTime + pauseBetweenRepetitionsMs}ms, Stop in ${nextStopTime + pauseBetweenRepetitionsMs}ms.")
-
+                repetitionScheduler?.schedule(startTask, delayForNextCycleStart, TimeUnit.MILLISECONDS)
+                repetitionScheduler?.schedule(stopTask, delayForNextCycleStop, TimeUnit.MILLISECONDS)
             }
-            // Schedule the final stop and cleanup after all repetitions
-            val finalStopTime = (durationMs + (repetitionsCount - 1) * (durationMs + pauseBetweenRepetitionsMs)) + durationMs
-            repetitionScheduler?.schedule( {
-                stopAlarm()
-                Timber.d("RoutineExecutor: All repetitions completed. Final stop.")
-            }, finalStopTime, TimeUnit.MILLISECONDS)
-
-
-        } else {
-            // If no repetitions, just schedule the final stop after the initial duration
-            repetitionScheduler?.schedule( {
-                stopAlarm()
-                Timber.d("RoutineExecutor: Single alarm instance completed. Final stop.")
-            }, durationMs, TimeUnit.MILLISECONDS)
         }
 
+        // Schedule the final cleanup task (hide notification, release resources)
+        val totalDurationIncludingPauses = durationMs + (repetitionsCount - 1) * (durationMs + pauseBetweenRepetitionsMs)
+        Timber.d("RoutineExecutor: Scheduling final cleanup in ${totalDurationIncludingPauses}ms.")
+        repetitionScheduler?.schedule( {
+            Timber.d("RoutineExecutor: Final cleanup task triggered.")
+            // Hide the alarm notification
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.cancel(ALARM_NOTIFICATION_ID)
+            Timber.d("RoutineExecutor: Alarm notification hidden.")
 
-        // Important: Clean up the scheduler when the routine finishes or is cancelled
-        // This needs to be handled outside of this function, perhaps in a global stopRoutine method.
+            // Release MediaPlayer and stop Vibrator definitively
+            mediaPlayer?.release()
+            mediaPlayer = null
+            vibrator?.cancel()
+            Timber.d("RoutineExecutor: Alarm fully stopped and resources released after all repetitions.")
+
+            // Restore original DND settings if they were modified
+            if (ignoreDnd && originalNotificationPolicyAccess && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                try {
+                    // Restore the original interruption filter
+                    if (originalInterruptionFilter != -1) {
+                        notificationManager?.setInterruptionFilter(originalInterruptionFilter)
+                        Timber.d("RoutineExecutor: Restored original interruption filter to: $originalInterruptionFilter")
+                    }
+                } catch (e: Exception) {
+                    Timber.e(e, "RoutineExecutor: Error restoring original interruption filter.")
+                }
+            }
+
+            // Notify listener that the ALARM action is finished (successfully after repetitions)
+            routineExecutionListener?.onActionFinished(ActionType.ALARM, true) // Use safe call
+
+            // Shutdown the scheduler after the final task
+            repetitionScheduler?.shutdown() // Use shutdown() as all tasks are scheduled
+            repetitionScheduler = null
+
+        }, totalDurationIncludingPauses, TimeUnit.MILLISECONDS)
     }
+
 
 
     // --- Helper function to show the alarm notification ---
     private fun showAlarmNotification(labelText: String) {
+        // ... (existing channel creation code) ...
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         // Create Notification Channel (required for Android 8.0 and above)
@@ -272,15 +480,17 @@ class RoutineExecutor @Inject constructor(
             notificationManager.createNotificationChannel(channel)
         }
 
-        // Create Intent for stopping the alarm
-        val stopAlarmIntent = Intent(context, AlarmStopperReceiver::class.java).apply {
-            action = AlarmStopperReceiver.ACTION_STOP_ALARM
-            // Add any extras if needed to identify the alarm instance
+        // Create Intent for stopping the alarm - NOW SENDING TO RoutineExecutionService
+        val stopAlarmIntent = Intent(context, RoutineExecutionService::class.java).apply {
+            action = RoutineExecutionService.ACTION_STOP_CURRENT_ALARM
+            // Add any extras if needed to identify the alarm instance or routine ID
+            // For now, stopping the alarm will stop the currently active ALARM action in the service
+            currentRoutine?.id?.let { putExtra(RoutineExecutionService.EXTRA_ROUTINE_ID, it) }
         }
 
         // Create PendingIntent for the stop action
         // FLAG_IMMUTABLE is recommended for security
-        val stopAlarmPendingIntent: PendingIntent = PendingIntent.getBroadcast(
+        val stopAlarmPendingIntent: PendingIntent = PendingIntent.getService( // Use getService
             context,
             0, // Request code, use a unique code if multiple PendingIntents are needed
             stopAlarmIntent,
@@ -289,14 +499,14 @@ class RoutineExecutor @Inject constructor(
 
         // Build the notification
         val builder = NotificationCompat.Builder(context, ALARM_NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_alarm) // Replace with your alarm icon
+            .setSmallIcon(R.drawable.ic_alarm) // Replace with your alarm icon (ensure you have this)
             .setContentTitle("Alarma de Rutina")
             .setContentText(labelText)
             .setPriority(NotificationCompat.PRIORITY_HIGH) // High priority to be more noticeable
             .setCategory(NotificationCompat.CATEGORY_ALARM) // Use ALARM category
-            .setAutoCancel(true) // Consider if you want it to disappear when tapped (maybe not for alarm)
+            // .setAutoCancel(true) // Consider if you want it to disappear when tapped (maybe not for alarm)
             .setOngoing(true) // Make the notification persistent until dismissed
-            .addAction(R.drawable.ic_stop, "Detener", stopAlarmPendingIntent) // Add the stop button
+            .addAction(R.drawable.ic_stop, "Detener", stopAlarmPendingIntent) // Add the stop button (ensure you have ic_stop)
 
         // Show the notification
         notificationManager.notify(ALARM_NOTIFICATION_ID, builder.build())
@@ -329,28 +539,46 @@ class RoutineExecutor @Inject constructor(
         notificationManager.cancel(ALARM_NOTIFICATION_ID)
         Timber.d("RoutineExecutor: Alarm notification hidden by manual stop.")
 
-        // You might want to notify the RoutineExecutionListener that the alarm action has been stopped manually
-        // routineExecutionListener.onActionFinished(ActionType.ALARM, false) // Indicate not finished normally
+        // ** Remove the Stop on Tap overlay **
+        routineExecutionListener?.onRemoveStopOnTapOverlay()
+        Timber.d("RoutineExecutor: Notified listener to remove Stop on Tap overlay.")
+
+        // Notify the RoutineExecutionListener that the alarm action has been stopped manually
+        routineExecutionListener?.onActionFinished(ActionType.ALARM, false) // Use safe call
 
     }
-        // This depends on your overall routine execution flow.
-        // routineExecutionListener.onActionFinished(ActionType.ALARM, true) // Or a specific status for being stopped
 
-    // --- Helper method to get the Vibrator (existing, but ensure it's correct) ---
-    // Make sure you have this method or the logic is directly in handleAlarmAction
-
-    // ... existing methods like isNotificationListenerEnabled, displayPermissionRequiredNotification, etc. ...
-
-    // Ensure you have a way to call stopAlarm() from outside RoutineExecutor if needed
-    // For example, if the whole routine is cancelled.
+    // This method is likely redundant now, as stopAlarm() and cancelRoutineExecution() cover cancellation.
+    // You can remove this if its functionality is covered by the other methods.
+    // If you need a method to stop *only* the currently executing action (and not the whole routine),
+    // you would need more complex state management in RoutineExecutor to know which action is active
+    // and how to specifically cancel it. For now, let's assume stopAlarm() handles the ALARM case,
+    // and cancelRoutineExecution() handles stopping everything.
+    /*
     fun cancelCurrentAction() {
         Timber.d("RoutineExecutor: cancelCurrentAction called.")
         // If the current action is ALARM, stop it.
-        // Add similar checks for other actions that might need cancellation.
         stopAlarm()
-        // ... cancel other ongoing actions ...
-        // You might also want to shut down the main routine executor if this cancels the whole routine
-        // executorService.shutdownNow() // If you are using an executor for the whole routine
+        // ... add logic to cancel other specific action types if necessary ...
+        // Example: If a PAUSE action is active, you would need to cancel the delay coroutine.
+        // This requires keeping a reference to the coroutine for the active action.
+    }
+    */
+
+
+    // Add a method to call when the entire routine is cancelled
+    // Note: This should also be called by the RoutineExecutionService if it's stopped prematurely
+    fun cancelRoutineExecution() {
+        Timber.d("RoutineExecutor: cancelRoutineExecution called.")
+        stopAlarm() // Stop any ongoing alarm action
+        // TODO: Add logic to stop other ongoing actions if any - This is complex and might require
+        // keeping track of the Coroutine Jobs for each action if they are long-running or suspendable.
+
+        // Cancel the coroutine scope to stop the execution loop
+        routineScope.cancel()
+        currentRoutine?.let { routineExecutionListener?.onRoutineExecutionCancelled(it.id) } // Use safe call
+        currentRoutine = null
+        Timber.d("RoutineExecutor: Routine execution cancelled.")
     }
 
 
@@ -695,6 +923,7 @@ class RoutineExecutor @Inject constructor(
     fun shutdown() {
         Timber.d("RoutineExecutor: shutdown() called.")
         stopAlarm() // Stop any ongoing alarm
+        routineScope.cancel() // Cancel the scope
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         notificationReader.shutdown() // Ensure NotificationReader has a shutdown method

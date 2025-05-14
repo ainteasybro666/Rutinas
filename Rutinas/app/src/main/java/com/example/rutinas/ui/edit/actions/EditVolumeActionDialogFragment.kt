@@ -1,151 +1,199 @@
 package com.example.rutinas.ui.edit.actions
 
+import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.SeekBar
-import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.core.os.bundleOf
-import androidx.viewbinding.ViewBinding
 import com.example.rutinas.data.model.Action
 import com.example.rutinas.data.model.ActionType
 import com.example.rutinas.data.model.DataWrapper
 import com.example.rutinas.databinding.FragmentEditVolumeActionBinding
 import com.example.rutinas.ui.edit.ActionDialogListener
+import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
 
-class EditVolumeActionDialogFragment(listener: ActionDialogListener) : BaseEditActionDialogFragment(listener) {
-    private var _binding: FragmentEditVolumeActionBinding? = null
-    private val binding get() = _binding!!
+@AndroidEntryPoint
+class EditVolumeActionDialogFragment(listener: ActionDialogListener) : BaseEditActionDialogFragment<FragmentEditVolumeActionBinding>(listener) {
 
     companion object {
-        private const val ARG_ACTION = "arg_action"
         fun newInstance(action: Action, listener: ActionDialogListener): EditVolumeActionDialogFragment {
-            val fragment = EditVolumeActionDialogFragment(listener)
-            fragment.arguments = bundleOf(ARG_ACTION to action)
-            return fragment
+            return EditVolumeActionDialogFragment(listener).apply {
+                arguments = newBundle(action)
+            }
         }
     }
-    override fun inflateBinding(inflater: LayoutInflater, container: ViewGroup?): ViewBinding {
-        _binding = FragmentEditVolumeActionBinding.inflate(inflater, container, false)
-        return binding
+
+    override fun inflateBinding(inflater: LayoutInflater, container: ViewGroup?): FragmentEditVolumeActionBinding {
+        Timber.d("EditVolumeActionDialogFragment: Inflating binding")
+        return FragmentEditVolumeActionBinding.inflate(inflater, container, false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        Timber.d("EditVolumeActionDialogFragment: onViewCreated() llamado")
         super.onViewCreated(view, savedInstanceState)
+        Timber.d("EditVolumeActionDialogFragment: onViewCreated() called")
+        setupUI()
+        loadActionData(actionToEdit) // Usar actionToEdit
+    }
 
-        try {
-            Timber.d("EditVolumeActionDialogFragment: Acción recibida - tipo: ${action.actionType}, datos: ${action.data}")
-            setupUI()
-            loadActionData()
+    // Override onCreateDialog to set up the dialog structure
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        Timber.d("EditVolumeActionDialogFragment: onCreateDialog() called.")
+        val dialog = super.onCreateDialog(savedInstanceState) as AlertDialog
 
-        } catch (e: Exception) {
-            Timber.e("EditVolumeActionDialogFragment: Error en onViewCreated - ${e.message}")
-            e.printStackTrace()
-        }
+        // The UI setup (listeners and initial state) will be done in onViewCreated
+
+        return dialog
     }
 
     private fun setupUI() {
-        Timber.d("EditVolumeActionDialogFragment: setupUI() llamado")
         with(binding) {
+            // Setup Listeners for CheckBoxes and SeekBars
             cbVolumeMedia.setOnCheckedChangeListener { _, isChecked ->
-                Timber.d("EditVolumeActionDialogFragment: Checkbox Media cambiado a $isChecked")
                 seekBarMediaVolume.visibility = if (isChecked) View.VISIBLE else View.GONE
-            }
-            cbVolumeRingtone.setOnCheckedChangeListener { _, isChecked ->
-                Timber.d("EditVolumeActionDialogFragment: Checkbox Ringtone cambiado a $isChecked")
-                seekBarRingtoneVolume.visibility = if (isChecked) View.VISIBLE else View.GONE
-            }
-            cbVolumeAlarm.setOnCheckedChangeListener { _, isChecked ->
-                Timber.d("EditVolumeActionDialogFragment: Checkbox Alarm cambiado a $isChecked")
-                seekBarAlarmVolume.visibility = if (isChecked) View.VISIBLE else View.GONE
+                tvMediaVolumeValue.visibility = if (isChecked) View.VISIBLE else View.GONE
             }
 
-            setupSeekBar(seekBarMediaVolume, tvMediaVolumeValue, "Media")
-            setupSeekBar(seekBarRingtoneVolume, tvRingtoneVolumeValue, "Ringtone")
-            setupSeekBar(seekBarAlarmVolume, tvAlarmVolumeValue, "Alarm")
+            seekBarMediaVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    tvMediaVolumeValue.text = progress.toString() // Update TextView with current progress
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+
+            cbVolumeRingtone.setOnCheckedChangeListener { _, isChecked ->
+                seekBarRingtoneVolume.visibility = if (isChecked) View.VISIBLE else View.GONE
+                tvRingtoneVolumeValue.visibility = if (isChecked) View.VISIBLE else View.GONE
+            }
+
+            seekBarRingtoneVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    tvRingtoneVolumeValue.text = progress.toString() // Update TextView with current progress
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+
+            cbVolumeAlarm.setOnCheckedChangeListener { _, isChecked ->
+                seekBarAlarmVolume.visibility = if (isChecked) View.VISIBLE else View.GONE
+                tvAlarmVolumeValue.visibility = if (isChecked) View.VISIBLE else View.GONE
+            }
+
+            seekBarAlarmVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    tvAlarmVolumeValue.text = progress.toString() // Update TextView with current progress
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+
+            // Add listeners for Save and Cancel buttons
+            btnSaveVolumeAction.setOnClickListener {
+                Timber.d("EditVolumeActionDialogFragment: Save button clicked.")
+                onSaveAction()
+            }
+
+            btnCancelVolumeAction.setOnClickListener {
+                Timber.d("EditVolumeActionDialogFragment: Cancel button clicked.")
+                dismiss()
+            }
         }
     }
 
-    private fun setupSeekBar(seekBar: SeekBar, textView: TextView, name: String) {
-        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                Timber.d("EditVolumeActionDialogFragment: SeekBar $name cambiado a $progress")
-                textView.text = "$progress%"
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
-    }
-
-    private fun loadActionData() {
-        Timber.d("EditVolumeActionDialogFragment: loadActionData() llamado")
+    override fun loadActionData(action: Action?) {
+        Timber.d("EditVolumeActionDialogFragment: loadActionData() called")
         try {
-            action.data?.let { dataWrapper ->
-                val data = dataWrapper.data
-
-                with(binding) {
-                    data["mediaVolume"]?.let { volume ->
-                        val mediaVolume = (volume as? Number)?.toInt() ?: 50
-                        Timber.d("EditVolumeActionDialogFragment: Volumen Media cargado: $mediaVolume")
-                        cbVolumeMedia.isChecked = true
-                        seekBarMediaVolume.progress = mediaVolume
-                    }
-                    data["ringtoneVolume"]?.let { volume ->
-                        val ringtoneVolume = (volume as? Number)?.toInt() ?: 50
-                        Timber.d("EditVolumeActionDialogFragment: Volumen Ringtone cargado: $ringtoneVolume")
-                        cbVolumeRingtone.isChecked = true
-                        seekBarRingtoneVolume.progress = ringtoneVolume
-                    }
-                    data["alarmVolume"]?.let { volume ->
-                        val alarmVolume = (volume as? Number)?.toInt() ?: 50
-                        Timber.d("EditVolumeActionDialogFragment: Volumen Alarm cargado: $alarmVolume")
-                        cbVolumeAlarm.isChecked = true
-                        seekBarAlarmVolume.progress = alarmVolume
+            action?.data?.let { dataWrapper -> // Usar action?.data
+                dataWrapper.data.forEach { (key, value) ->
+                    when (key) {
+                        "mediaVolume" -> {
+                            binding.cbVolumeMedia.isChecked = true
+                            binding.seekBarMediaVolume.progress = (value as? Int) ?: 50
+                            binding.tvMediaVolumeValue.text = (value as? Int)?.toString() ?: "50"
+                            binding.seekBarMediaVolume.visibility = View.VISIBLE
+                            binding.tvMediaVolumeValue.visibility = View.VISIBLE
+                        }
+                        "ringtoneVolume" -> {
+                            binding.cbVolumeRingtone.isChecked = true
+                            binding.seekBarRingtoneVolume.progress = (value as? Int) ?: 50
+                            binding.tvRingtoneVolumeValue.text = (value as? Int)?.toString() ?: "50"
+                            binding.seekBarRingtoneVolume.visibility = View.VISIBLE
+                            binding.tvRingtoneVolumeValue.visibility = View.VISIBLE
+                        }
+                        "alarmVolume" -> {
+                            binding.cbVolumeAlarm.isChecked = true
+                            binding.seekBarAlarmVolume.progress = (value as? Int) ?: 50
+                            binding.tvAlarmVolumeValue.text = (value as? Int)?.toString() ?: "50"
+                            binding.seekBarAlarmVolume.visibility = View.VISIBLE
+                            binding.tvAlarmVolumeValue.visibility = View.VISIBLE
+                        }
                     }
                 }
             }
+            Timber.d("EditVolumeActionDialogFragment: Action data loaded into UI.")
         } catch (e: Exception) {
             Timber.e("EditVolumeActionDialogFragment: Error al cargar datos - ${e.message}")
         }
     }
 
-    override fun saveAction() {
-        Timber.d("EditVolumeActionDialogFragment: saveAction() llamado")
+    override fun saveActionData(): Action {
+        Timber.d("EditVolumeActionDialogFragment: saveActionData() called")
         try {
             val volumeData = mutableMapOf<String, Any>()
-            with(binding) {
-                if (cbVolumeMedia.isChecked) {
-                    volumeData["mediaVolume"] = seekBarMediaVolume.progress
-                    Timber.d("EditVolumeActionDialogFragment: Guardando volumen Media: ${seekBarMediaVolume.progress}")
-                }
-                if (cbVolumeRingtone.isChecked) {
-                    volumeData["ringtoneVolume"] = seekBarRingtoneVolume.progress
-                    Timber.d("EditVolumeActionDialogFragment: Guardando volumen Ringtone: ${seekBarRingtoneVolume.progress}")
-                }
-                if (cbVolumeAlarm.isChecked) {
-                    volumeData["alarmVolume"] = seekBarAlarmVolume.progress
-                    Timber.d("EditVolumeActionDialogFragment: Guardando volumen Alarm: ${seekBarAlarmVolume.progress}")
-                }
+
+            if (binding.cbVolumeMedia.isChecked) {
+                volumeData["mediaVolume"] = binding.seekBarMediaVolume.progress
             }
 
-            val updatedAction = action.copy(
+            if (binding.cbVolumeRingtone.isChecked) {
+                volumeData["ringtoneVolume"] = binding.seekBarRingtoneVolume.progress
+            }
+
+            if (binding.cbVolumeAlarm.isChecked) {
+                volumeData["alarmVolume"] = binding.seekBarAlarmVolume.progress
+            }
+
+            // Create DataWrapper with collected data
+            val data = DataWrapper(volumeData)
+
+            // Return the updated Action object
+            val updatedAction = actionToEdit.copy( // Usar actionToEdit
                 actionType = ActionType.VOLUME,
-                data = DataWrapper(volumeData)
+                data = data,
+                // Keep existing routineId, executionOrder, pauseDuration
+                routineId = actionToEdit.routineId,
+                executionOrder = actionToEdit.executionOrder,
+                pauseDuration = actionToEdit.pauseDuration
             )
-            notifyActionUpdated(updatedAction)
 
             Timber.d("EditVolumeActionDialogFragment: Acción actualizada y notificada")
+            return updatedAction
         } catch (e: Exception) {
             Timber.e("EditVolumeActionDialogFragment: Error al guardar acción - ${e.message}")
+            throw e // Relanzar la excepción
         }
     }
 
-    override fun onDestroyView() {
-        Timber.d("EditVolumeActionDialogFragment: onDestroyView() llamado")
-        super.onDestroyView()
-        _binding = null
+    // Implementar onSaveAction
+    override fun onSaveAction() { // Make this function public or protected if needed from base
+        Timber.d("EditVolumeActionDialogFragment: onSaveAction() llamado")
+        try {
+            val updatedAction = saveActionData()
+            notifyActionUpdated(updatedAction)
+            Timber.d("EditVolumeActionDialogFragment: Action updated and notified")
+
+            // Log the saved data for verification
+            Timber.d("EditVolumeActionDialogFragment: Saved Data: ${updatedAction.data?.data}")
+            dismiss()
+        } catch (e: Exception) {
+            Timber.e("EditVolumeActionDialogFragment: Error saving action - ${e.message}")
+            showErrorDialog("Error al guardar la acción: ${e.message}")
+        }
     }
 }

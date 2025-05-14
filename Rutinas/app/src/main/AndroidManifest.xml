@@ -2,7 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permissions -->
+    <!-- Permissions (ensure you have FOREGROUND_SERVICE if targeting Android P and above) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
@@ -10,6 +11,8 @@
         android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
         tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"/> <!-- Added for DND control -->
     <!-- <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" /> -->
 
     <application
@@ -46,9 +49,18 @@
             </intent-filter>
         </service>
 
+        <!-- Register the RoutineExecutionService -->
+        <service android:name=".service.RoutineExecutionService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"> <!-- Specify foregroundServiceType for API 29+ -->
+            <!-- Intent filters if the service needs to respond to specific implicit intents,
+                 but here we are using explicit intents (ACTION_START_ROUTINE, ACTION_STOP_CURRENT_ALARM) -->
+        </service>
+
+
         <!-- Register the AlarmStopperReceiver -->
         <receiver android:name=".receivers.AlarmStopperReceiver"
-            android:exported="false"> <!-- Set exported to false for security if only your app sends this broadcast -->
+            android:exported="false">
             <intent-filter>
                 <action android:name="com.example.rutinas.action.STOP_ALARM"/>
             </intent-filter>
