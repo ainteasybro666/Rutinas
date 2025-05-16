@@ -61,16 +61,16 @@ class EditTimeActionDialogFragment(listener: ActionDialogListener) : BaseEditAct
     }
 
     // Implementar onSaveAction
-    override fun onSaveAction() {
-        Timber.d("EditTimeActionDialogFragment: onSaveAction() called (no data to save).")
-        try {
-            val updatedAction = saveActionData()
-            notifyActionUpdated(updatedAction)
-            Timber.d("EditTimeActionDialogFragment: Action updated and notified (no data to save).")
-            dismiss()
-        } catch (e: Exception) {
-            Timber.e("EditTimeActionDialogFragment: Error saving action - ${e.message}")
-            showErrorDialog("Error al guardar la acción: ${e.message}")
-        }
-    }
+//    override fun onSaveAction() {
+//        Timber.d("EditTimeActionDialogFragment: onSaveAction() called (no data to save).")
+//        try {
+//            val updatedAction = saveActionData()
+//            notifyActionUpdated(updatedAction)
+//            Timber.d("EditTimeActionDialogFragment: Action updated and notified (no data to save).")
+//            dismiss()
+//        } catch (e: Exception) {
+//            Timber.e("EditTimeActionDialogFragment: Error saving action - ${e.message}")
+//            showErrorDialog("Error al guardar la acción: ${e.message}")
+//        }
+//    }
 }

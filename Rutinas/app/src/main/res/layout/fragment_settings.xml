@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    tools:context=".ui.main.fragments.SettingsFragment">
+
+    <TextView
+        android:id="@+id/tvSettingsTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Configuraciones"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:gravity="center_horizontal"
+        android:layout_marginBottom="24dp"/>
+
+    <!-- Opción para gestionar permisos -->
+    <TextView
+        android:id="@+id/tvPermissionsSetting"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Permisos de la Aplicación"
+        android:textSize="18sp"
+        android:paddingVertical="12dp"
+        android:background="?android:attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"/>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@android:color/darker_gray"/>
+
+    <!-- Puedes añadir más opciones aquí -->
+    <!--
+    <TextView
+        android:id="@+id/tvGeneralSetting"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Configuración General"
+        android:textSize="18sp"
+        android:paddingVertical="12dp"
+        android:background="?android:attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"/>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@android:color/darker_gray"/>
+    -->
+
+
+</LinearLayout>

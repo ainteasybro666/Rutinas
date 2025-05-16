@@ -14,9 +14,10 @@ import com.example.rutinas.data.model.Action
 import com.example.rutinas.ui.edit.ActionDialogListener
 import timber.log.Timber
 
-// Eliminar @AndroidEntryPoint de aquí
+//Eliminar @AndroidEntryPoint de aquí
 // @AndroidEntryPoint
-abstract class BaseEditActionDialogFragment<T : ViewBinding>(protected val listener: ActionDialogListener) : DialogFragment() { // Volver a usar genérico T
+// Cambiar de vuelta a T : ViewBinding
+abstract class BaseEditActionDialogFragment<T : ViewBinding>(protected val listener: ActionDialogListener) : DialogFragment() {
 
     // To avoid showing the error dialog multiple times.
     private var errorDialogShown = false
@@ -49,7 +50,7 @@ abstract class BaseEditActionDialogFragment<T : ViewBinding>(protected val liste
             e.printStackTrace()
             if (!errorDialogShown) {
                 errorDialogShown = true
-                showErrorDialog(e.message ?: "Error desconocido")
+                showErrorDialog(e.message ?: "Error desconocido al cargar la acción")
             }
         }
     }
@@ -59,17 +60,25 @@ abstract class BaseEditActionDialogFragment<T : ViewBinding>(protected val liste
             val dialogBuilder = AlertDialog.Builder(requireContext())
             // Inflar el binding en la subclase y pasarlo a setView
             _binding = inflateBinding(layoutInflater, null)
-            dialogBuilder.setView(binding.root)
 
-
-            // Use safe call and Elvis operator to provide a default empty View if binding is null
+            // Usar safe call y Elvis operator para proporcionar una vista vacía por defecto si binding es null
             _binding?.let {
-                    dialogBuilder.setView(it.root)
-                }
+                dialogBuilder.setView(it.root)
+            } ?: throw IllegalStateException("Binding no se pudo inflar.")
 
-            // La configuración de botones la manejarán las subclases
-            // dialogBuilder.setPositiveButton("Guardar") { _, _ -> onSaveAction() }
-            // dialogBuilder.setNegativeButton("Cancelar") { _, _ -> dismiss() }
+
+            // ** >>>>> INICIO: Configurar botones Guardar y Cancelar aquí <<<<< **
+            dialogBuilder.setPositiveButton("Guardar") { _, _ ->
+                Timber.d("${this.javaClass.simpleName}: Botón Guardar pulsado")
+                onSaveActionClicked() // Llamar a un nuevo método que maneja el guardado y cierre
+            }
+            dialogBuilder.setNegativeButton("Cancelar") { _, _ ->
+                Timber.d("${this.javaClass.simpleName}: Botón Cancelar pulsado")
+                // El diálogo se cierra automáticamente al hacer clic en el botón negativo por defecto.
+                // Puedes añadir lógica adicional aquí si es necesario antes de cerrar.
+            }
+            // ** >>>>> FIN: Configurar botones Guardar y Cancelar aquí <<<<< **
+
 
             val dialog = dialogBuilder.create()
             dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -77,18 +86,32 @@ abstract class BaseEditActionDialogFragment<T : ViewBinding>(protected val liste
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
+
+            // Asegurarse de que loadActionData se llama DESPUÉS de que el binding esté inflado
+            // y antes de mostrar el diálogo si es posible, o en onActivityCreated.
+            // Vamos a llamarlo en onActivityCreated para asegurarnos de que el contexto y la vista están listos.
+
             dialog
         } catch (e: Exception) {
             Timber.e("BaseEditActionDialogFragment: Error al crear el diálogo - ${e.message}")
             e.printStackTrace()
-            showErrorDialog("Error al cargar la configuración de la acción: ${e.message}")
+            showErrorDialog("Error al crear el diálogo de configuración: ${e.message}")
             AlertDialog.Builder(requireContext()).create()
         }
     }
 
+    // Llamar a loadActionData aquí para asegurar que el binding esté listo
+    override fun onActivityCreated(savedInstanceState: Bundle?) {
+        super.onActivityCreated(savedInstanceState)
+        Timber.d("${this.javaClass.simpleName}: onActivityCreated, calling loadActionData")
+        loadActionData(actionToEdit)
+    }
+
+
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null // Limpiar el binding
+        Timber.d("${this.javaClass.simpleName}: onDestroyView, binding cleaned up")
     }
 
     protected fun showErrorDialog(message: String) {
@@ -99,16 +122,40 @@ abstract class BaseEditActionDialogFragment<T : ViewBinding>(protected val liste
                 dismiss()
             }
             .show()
+        Timber.e("${this.javaClass.simpleName}: Showing error dialog: $message")
     }
+
+    // Nuevo método para manejar el clic del botón Guardar
+    private fun onSaveActionClicked() {
+        try {
+            val updatedAction = saveActionData() // Llama al método de la subclase para obtener los datos
+            notifyActionUpdated(updatedAction) // Notifica al listener
+            Timber.d("${this.javaClass.simpleName}: Acción actualizada y notificada. Cerrando diálogo.")
+            dismiss() // Cerrar el diálogo
+        } catch (e: Exception) {
+            Timber.e("${this.javaClass.simpleName}: Error al guardar la acción - ${e.message}")
+            e.printStackTrace()
+            showErrorDialog("Error al guardar la acción: ${e.message}")
+        }
+    }
+
 
     // Cambiar el método abstracto para que devuelva el genérico T
     protected abstract fun inflateBinding(inflater: LayoutInflater, container: ViewGroup?): T
 
-    protected abstract fun onSaveAction()
+    // Este método ahora solo carga los datos en la UI
     protected abstract fun loadActionData(action: Action?)
+
+    // Este método ahora solo recolecta los datos de la UI y devuelve una nueva Acción con los datos actualizados
     protected abstract fun saveActionData(): Action
 
     protected fun notifyActionUpdated(updatedAction: Action){
         listener.onActionUpdated(updatedAction)
+        Timber.d("${this.javaClass.simpleName}: Notified listener of action update for UUID: ${updatedAction.uuid}")
+    }
+
+    // Interfaz para que la Activity/Fragmento que muestra el diálogo reciba la acción actualizada
+    interface ActionDialogListener {
+        fun onActionUpdated(action: Action)
     }
 }

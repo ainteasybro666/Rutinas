@@ -127,7 +127,7 @@ class EditAlarmActionDialogFragment(listener: ActionDialogListener) : BaseEditAc
             // Add listeners for Save and Cancel buttons
             btnSaveAlarmAction.setOnClickListener {
                 Timber.d("EditAlarmActionDialogFragment: Save button clicked.")
-                onSaveAction()
+//                onSaveAction()
             }
 
             btnCancelAlarmAction.setOnClickListener {
@@ -279,10 +279,5 @@ class EditAlarmActionDialogFragment(listener: ActionDialogListener) : BaseEditAc
             executionOrder = actionToEdit.executionOrder,
             pauseDuration = actionToEdit.pauseDuration
         )
-    }
-
-    override fun onSaveAction() {
-        val updatedAction = saveActionData()
-        notifyActionUpdated(updatedAction)
     }
 }

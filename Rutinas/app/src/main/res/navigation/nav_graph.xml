@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <navigation xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/nav_graph"
     app:startDestination="@id/routineListFragment">
 
@@ -20,6 +21,11 @@
         <action
             android:id="@+id/action_routineListFragment_to_statusFragment"
             app:destination="@id/statusFragment" />
+
+        <!-- ** Nueva acción para navegar a las configuraciones ** -->
+        <action
+            android:id="@+id/action_routineListFragment_to_settingsFragment"
+            app:destination="@id/settingsFragment" />
     </fragment>
 
     <!-- Fragmento de edición de rutina -->
@@ -138,4 +144,29 @@
         android:id="@+id/statusFragment"
         android:name="com.example.rutinas.ui.main.fragments.StatusFragment"
         android:label="Status" />
+
+    <!-- ** Nuevo fragmento para las configuraciones ** -->
+    <fragment
+        android:id="@+id/settingsFragment"
+    android:name="com.example.rutinas.ui.main.fragments.SettingsFragment"
+    android:label="Configuraciones"
+    tools:layout="@layout/fragment_settings">
+
+    <!-- Acciones desde el fragmento de configuraciones (si las hay) -->
+    <!-- Por ejemplo, una acción para ir al fragmento/sección de permisos -->
+    <action
+        android:id="@+id/action_settingsFragment_to_permissionsFragment"
+        app:destination="@id/permissionsFragment" />
+
+</fragment>
+
+    <!-- ** Nuevo fragmento/sección para la gestión de permisos ** -->
+<fragment
+android:id="@+id/permissionsFragment"
+    android:name="com.example.rutinas.ui.main.fragments.PermissionsFragment"
+    android:label="Permisos de la Aplicación"
+    tools:layout="@layout/fragment_permissions">
+
+    <!-- Acciones desde aquí (si las hay) -->
+    </fragment>
 </navigation>

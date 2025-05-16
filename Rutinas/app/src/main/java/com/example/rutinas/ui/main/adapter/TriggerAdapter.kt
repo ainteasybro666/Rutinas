@@ -10,7 +10,8 @@ import com.example.rutinas.databinding.ItemTriggerBinding
 import timber.log.Timber
 
 class TriggerAdapter(
-    private val onTriggerDeleted: (Trigger) -> Unit
+    private val onTriggerDeleted: (Trigger) -> Unit,
+    private val onTriggerClicked: (Trigger) -> Unit
 ) : ListAdapter<Trigger, TriggerAdapter.TriggerViewHolder>(TriggerDiffCallback()) {
 
     inner class TriggerViewHolder(

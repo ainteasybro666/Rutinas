@@ -1,0 +1,86 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+
+    <!-- Rombo superior (centro en 24,12) -->
+    <path
+        android:fillColor="#1B5E20"
+        android:strokeColor="#76FF03"
+        android:strokeWidth="2"
+        android:pathData="
+            M24,4
+            L30,12
+            L24,20
+            L18,12
+            Z" />
+
+    <!-- Rombo derecho (centro en 36,24) -->
+    <path
+        android:fillColor="#1B5E20"
+        android:strokeColor="#76FF03"
+        android:strokeWidth="2"
+        android:pathData="
+            M36,16
+            L42,24
+            L36,32
+            L30,24
+            Z" />
+
+    <!-- Rombo inferior (centro en 24,36) -->
+    <path
+        android:fillColor="#1B5E20"
+        android:strokeColor="#76FF03"
+        android:strokeWidth="2"
+        android:pathData="
+            M24,28
+            L30,36
+            L24,44
+            L18,36
+            Z" />
+
+    <!-- Rombo izquierdo (centro en 12,24) -->
+    <path
+        android:fillColor="#1B5E20"
+        android:strokeColor="#76FF03"
+        android:strokeWidth="2"
+        android:pathData="
+            M12,16
+            L18,24
+            L12,32
+            L6,24
+            Z" />
+
+    <!-- Sombras internas para volumen -->
+    <path
+        android:fillColor="#00000033"
+        android:pathData="
+            M24,6 L28,12 L24,18 L20,12 Z" />
+    <path
+        android:fillColor="#00000033"
+        android:pathData="
+            M34,24 L38,28 L34,32 L30,28 Z" />
+    <path
+        android:fillColor="#00000033"
+        android:pathData="
+            M24,30 L28,36 L24,42 L20,36 Z" />
+    <path
+        android:fillColor="#00000033"
+        android:pathData="
+            M10,24 L14,28 L10,32 L6,28 Z" />
+
+    <!-- Destellos eléctricos simplificados -->
+    <path
+        android:fillColor="#CCFF90"
+        android:pathData="M22,2 L26,10 L24,6 Z" />
+    <path
+        android:fillColor="#CCFF90"
+        android:pathData="M38,22 L46,26 L42,24 Z" />
+    <path
+        android:fillColor="#CCFF90"
+        android:pathData="M22,42 L26,46 L24,44 Z" />
+    <path
+        android:fillColor="#CCFF90"
+        android:pathData="M2,22 L10,26 L6,24 Z" />
+</vector>

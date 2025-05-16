@@ -86,18 +86,18 @@ class EditAnnouncementActionDialogFragment(listener: ActionDialogListener) : Bas
     }
 
     // Implementar onSaveAction para llamar a saveActionData y notificar
-    override fun onSaveAction() {
-        Timber.d("EditAnnouncementActionDialogFragment: onSaveAction() llamado")
-        try {
-            val updatedAction = saveActionData()
-            notifyActionUpdated(updatedAction)
-            Timber.d("EditAnnouncementActionDialogFragment: Acción actualizada y notificada")
-            dismiss() // Cerrar el diálogo después de guardar
-        } catch (e: Exception) {
-            Timber.e("EditAnnouncementActionDialogFragment: Error al guardar acción - ${e.message}")
-            showErrorDialog("Error al guardar la acción: ${e.message}")
-        }
-    }
+//    override fun onSaveAction() {
+//        Timber.d("EditAnnouncementActionDialogFragment: onSaveAction() llamado")
+//        try {
+//            val updatedAction = saveActionData()
+//            notifyActionUpdated(updatedAction)
+//            Timber.d("EditAnnouncementActionDialogFragment: Acción actualizada y notificada")
+//            dismiss() // Cerrar el diálogo después de guardar
+//        } catch (e: Exception) {
+//            Timber.e("EditAnnouncementActionDialogFragment: Error al guardar acción - ${e.message}")
+//            showErrorDialog("Error al guardar la acción: ${e.message}")
+//        }
+//    }
 
 
     override fun onDestroyView() {

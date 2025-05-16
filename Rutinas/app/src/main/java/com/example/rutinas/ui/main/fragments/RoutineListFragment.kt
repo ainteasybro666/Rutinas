@@ -14,10 +14,14 @@ import com.example.rutinas.ui.main.adapter.RoutineAdapter
 import com.example.rutinas.ui.viewmodel.RoutineListViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import android.app.AlertDialog // Import AlertDialog
+import android.widget.Toolbar
+import androidx.appcompat.app.AppCompatActivity
 
 // Importar NavController
 import androidx.navigation.fragment.findNavController
+import androidx.navigation.ui.NavigationUI
 import com.example.rutinas.domain.Routine
+import timber.log.Timber
 
 @AndroidEntryPoint
 class RoutineListFragment : BaseFragment() {
@@ -68,9 +72,29 @@ class RoutineListFragment : BaseFragment() {
     }
 
     // Función para navegar al fragmento de edición
-    private fun navigateToEditRoutine(routineUuid: String) {
+    fun navigateToEditRoutine(routineUuid: String?) {
+        Timber.d("RoutineListFragment: navigateToEditRoutine called for UUID: $routineUuid")
         // Asegúrate de que la acción de navegación está definida en tu nav_graph.xml
         // y que acepta un argumento 'routine_uuid' de tipo String.
+
+        // ** >>>>> INICIO: Desvincular la ActionBar de la Activity de NavigationUI <<<<< **
+        // Obtener una referencia a la Activity y su ActionBar si está configurada
+        val activity = requireActivity()
+        if (activity is AppCompatActivity) {
+            val supportActionBar = activity.supportActionBar
+            if (supportActionBar != null) {
+                // Deshabilitar la flecha "Up" y potencialmente otras interacciones de NavigationUI
+                // al desvincular la ActionBar.
+                // Esto evita que NavigationUI intente actualizar la ActionBar durante la navegación.
+                NavigationUI.setupActionBarWithNavController(activity, findNavController(), null) // Pasamos null para desvincular
+                // Opcional: Ocultar la Toolbar de la Activity aquí también para ser más explícito
+                //activity.findViewById<Toolbar>(R.id.toolbar)?.visibility = View.GONE // Si la Toolbar de la Activity tiene este ID
+            }
+        }
+        // ** >>>>> FIN: Desvincular la ActionBar de la Activity de NavigationUI <<<<< **
+
+
+        // Iniciar la navegación
         val action = RoutineListFragmentDirections.actionRoutineListFragmentToRoutineEditFragment(routineUuid = routineUuid)
         findNavController().navigate(action)
     }

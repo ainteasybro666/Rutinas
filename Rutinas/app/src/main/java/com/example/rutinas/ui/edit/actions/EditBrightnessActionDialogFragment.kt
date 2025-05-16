@@ -74,16 +74,15 @@ class EditBrightnessActionDialogFragment(listener: ActionDialogListener) : BaseE
     }
 
     // Implementar onSaveAction
-    override fun onSaveAction() {
-        Timber.d("EditBrightnessActionDialogFragment: onSaveAction() llamado")
-        try {
-            val updatedAction = saveActionData()
-            notifyActionUpdated(updatedAction)
-            Timber.d("EditBrightnessActionDialogFragment: Action updated and notified")
-            dismiss()
-        } catch (e: Exception) {
-            Timber.e("EditBrightnessActionDialogFragment: Error saving action - ${e.message}")
-            showErrorDialog("Error al guardar la acción: ${e.message}")
-        }
+//    override fun onSaveAction() {
+//        Timber.d("EditBrightnessActionDialogFragment: onSaveAction() llamado")
+//        try {
+//            val updatedAction = saveActionData()
+//            notifyActionUpdated(updatedAction)
+//            Timber.d("EditBrightnessActionDialogFragment: Action updated and notified")
+//            dismiss()
+//        } catch (e: Exception) {
+//            Timber.e("EditBrightnessActionDialogFragment: Error saving action - ${e.message}")
+//            showErrorDialog("Error al guardar la acción: ${e.message}")
+//        }
     }
-}

@@ -80,16 +80,16 @@ class EditSoundModeActionDialogFragment(listener: ActionDialogListener) : BaseEd
     }
 
     // Implementar onSaveAction
-    override fun onSaveAction() {
-        Timber.d("EditSoundModeActionDialogFragment: onSaveAction() llamado")
-        try {
-            val updatedAction = saveActionData()
-            notifyActionUpdated(updatedAction)
-            Timber.d("EditSoundModeActionDialogFragment: Action updated and notified")
-            dismiss()
-        } catch (e: Exception) {
-            Timber.e("EditSoundModeActionDialogFragment: Error saving action - ${e.message}")
-            showErrorDialog("Error al guardar la acción: ${e.message}")
-        }
-    }
+//    override fun onSaveAction() {
+//        Timber.d("EditSoundModeActionDialogFragment: onSaveAction() llamado")
+//        try {
+//            val updatedAction = saveActionData()
+//            notifyActionUpdated(updatedAction)
+//            Timber.d("EditSoundModeActionDialogFragment: Action updated and notified")
+//            dismiss()
+//        } catch (e: Exception) {
+//            Timber.e("EditSoundModeActionDialogFragment: Error saving action - ${e.message}")
+//            showErrorDialog("Error al guardar la acción: ${e.message}")
+//        }
+//    }
 }

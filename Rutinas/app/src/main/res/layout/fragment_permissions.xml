@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    tools:context=".ui.main.fragments.PermissionsFragment">
+
+    <TextView
+        android:id="@+id/tvPermissionsTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Permisos de la Aplicación"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:gravity="center_horizontal"
+        android:layout_marginBottom="24dp"/>
+
+    <!-- Permiso de Superposición (SYSTEM_ALERT_WINDOW) -->
+    <TextView
+        android:id="@+id/tvOverlayPermissionTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Permiso para dibujar sobre otras aplicaciones (Stop on Tap)"
+        android:textSize="18sp"
+        android:layout_marginBottom="4dp"/>
+
+    <TextView
+        android:id="@+id/tvOverlayPermissionStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Estado: Desconocido"
+        android:layout_marginBottom="8dp"/>
+
+    <Button
+        android:id="@+id/btnRequestOverlayPermission"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Conceder Permiso"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="16dp"/>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@android:color/darker_gray"
+        android:layout_marginBottom="16dp"/>
+
+    <!-- Permiso de Modificar Ajustes del Sistema (WRITE_SETTINGS) -->
+    <TextView
+        android:id="@+id/tvWriteSettingsPermissionTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Permiso para modificar ajustes del sistema (Brillo)"
+        android:textSize="18sp"
+        android:layout_marginBottom="4dp"/>
+
+    <TextView
+        android:id="@+id/tvWriteSettingsPermissionStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Estado: Desconocido"
+        android:layout_marginBottom="8dp"/>
+
+    <Button
+        android:id="@+id/btnRequestWriteSettingsPermission"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Conceder Permiso"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="16dp"/>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@android:color/darker_gray"
+        android:layout_marginBottom="16dp"/>
+
+    <!-- Permiso de Acceso a Notificaciones (NOTIFICATION_LISTENER_SETTINGS) -->
+    <TextView
+        android:id="@+id/tvNotificationListenerPermissionTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Permiso de Acceso a Notificaciones (Leer Notificaciones)"
+        android:textSize="18sp"
+        android:layout_marginBottom="4dp"/>
+
+    <TextView
+        android:id="@+id/tvNotificationListenerPermissionStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Estado: Desconocido"
+        android:layout_marginBottom="8dp"/>
+
+    <Button
+        android:id="@+id/btnRequestNotificationListenerPermission"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Conceder Permiso"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="16dp"/>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@android:color/darker_gray"
+        android:layout_marginBottom="16dp"/>
+
+    <!-- Puedes añadir más permisos importantes aquí -->
+
+</LinearLayout>

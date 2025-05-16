@@ -93,16 +93,16 @@ class EditPauseActionDialogFragment(listener: ActionDialogListener) : BaseEditAc
     }
 
     // Implementar onSaveAction
-    override fun onSaveAction() {
-        Timber.d("EditPauseActionDialogFragment: onSaveAction() llamado")
-        try {
-            val updatedAction = saveActionData()
-            notifyActionUpdated(updatedAction)
-            Timber.d("EditPauseActionDialogFragment: Action updated and notified")
-            dismiss()
-        } catch (e: Exception) {
-            Timber.e("EditPauseActionDialogFragment: Error saving action - ${e.message}")
-            showErrorDialog("Error al guardar la acción: ${e.message}")
-        }
-    }
+//    override fun onSaveAction() {
+//        Timber.d("EditPauseActionDialogFragment: onSaveAction() llamado")
+//        try {
+//            val updatedAction = saveActionData()
+//            notifyActionUpdated(updatedAction)
+//            Timber.d("EditPauseActionDialogFragment: Action updated and notified")
+//            dismiss()
+//        } catch (e: Exception) {
+//            Timber.e("EditPauseActionDialogFragment: Error saving action - ${e.message}")
+//            showErrorDialog("Error al guardar la acción: ${e.message}")
+//        }
+//    }
 }

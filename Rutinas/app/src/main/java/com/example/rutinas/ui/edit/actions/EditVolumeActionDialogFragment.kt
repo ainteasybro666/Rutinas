@@ -96,7 +96,7 @@ class EditVolumeActionDialogFragment(listener: ActionDialogListener) : BaseEditA
             // Add listeners for Save and Cancel buttons
             btnSaveVolumeAction.setOnClickListener {
                 Timber.d("EditVolumeActionDialogFragment: Save button clicked.")
-                onSaveAction()
+//                onSaveAction()
             }
 
             btnCancelVolumeAction.setOnClickListener {
@@ -181,19 +181,19 @@ class EditVolumeActionDialogFragment(listener: ActionDialogListener) : BaseEditA
     }
 
     // Implementar onSaveAction
-    override fun onSaveAction() { // Make this function public or protected if needed from base
-        Timber.d("EditVolumeActionDialogFragment: onSaveAction() llamado")
-        try {
-            val updatedAction = saveActionData()
-            notifyActionUpdated(updatedAction)
-            Timber.d("EditVolumeActionDialogFragment: Action updated and notified")
-
-            // Log the saved data for verification
-            Timber.d("EditVolumeActionDialogFragment: Saved Data: ${updatedAction.data?.data}")
-            dismiss()
-        } catch (e: Exception) {
-            Timber.e("EditVolumeActionDialogFragment: Error saving action - ${e.message}")
-            showErrorDialog("Error al guardar la acción: ${e.message}")
-        }
-    }
+//    override fun onSaveAction() { // Make this function public or protected if needed from base
+//        Timber.d("EditVolumeActionDialogFragment: onSaveAction() llamado")
+//        try {
+//            val updatedAction = saveActionData()
+//            notifyActionUpdated(updatedAction)
+//            Timber.d("EditVolumeActionDialogFragment: Action updated and notified")
+//
+//            // Log the saved data for verification
+//            Timber.d("EditVolumeActionDialogFragment: Saved Data: ${updatedAction.data?.data}")
+//            dismiss()
+//        } catch (e: Exception) {
+//            Timber.e("EditVolumeActionDialogFragment: Error saving action - ${e.message}")
+//            showErrorDialog("Error al guardar la acción: ${e.message}")
+//        }
+//    }
 }
