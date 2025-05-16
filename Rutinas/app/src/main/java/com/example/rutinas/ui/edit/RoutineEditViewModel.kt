@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import timber.log.Timber.Forest.e
 import java.time.LocalDateTime
 import java.util.UUID // Import UUID
 import javax.inject.Inject
@@ -38,10 +39,21 @@ class RoutineEditViewModel @Inject constructor(
     private val _triggers = MutableStateFlow<List<Trigger>>(emptyList())
     val triggers: StateFlow<List<Trigger>> = _triggers.asStateFlow()
 
+    // Flujo para eventos de UI (como mostrar Toasts)
+    private val _uiEvent = MutableSharedFlow<UiEvent>()
+    val uiEvent: SharedFlow<UiEvent> = _uiEvent.asSharedFlow()
+
+    // Clase sealed para definir los tipos de eventos de UI
+    sealed class UiEvent {
+        data class ShowMessage(val message: String) : UiEvent()
+        // Puedes añadir otros eventos aquí, ej: NavigateBack, ShowLoading, HideLoading
+    }
+
     private val _saveResult = MutableSharedFlow<Resource<Long>>()
     val saveResult: SharedFlow<Resource<Long>> = _saveResult.asSharedFlow()
 
     private var isNewRoutine: Boolean = true // Flag to track if it's a new routine
+
 
     // Load routine based on UUID, or initialize for a new routine
     fun loadRoutine(uuid: String?) { // Acepta String?
@@ -214,22 +226,51 @@ class RoutineEditViewModel @Inject constructor(
                 _saveResult.emit(Resource.Error(e.localizedMessage ?: "Error desconocido"))
             }
         }
+
+        // Ejemplo de cómo usarlo en el ViewModel (dentro de saveRoutine, por ejemplo):
+        // En lugar de emitir Resource.Error directamente al _saveResult si es un error de validación del trigger:
+        // _saveResult.emit(Resource.Error("Debes seleccionar al menos un día de la semana..."))
+        // Podrías emitir un evento de UI para mostrar el Toast:
+        viewModelScope.launch {
+            _uiEvent.emit(UiEvent.ShowMessage("Debes seleccionar al menos un día de la semana para un trigger semanal."))
+            // Y luego podrías simplemente retornar o emitir un Resource.Error al saveResult si quieres que el Fragment también sepa que el guardado falló por validación.
+        }
+
+        // O para un error en el try-catch:
+        // _saveResult.emit(Resource.Error(e.localizedMessage ?: "Error desconocido"))
+        // Cambiar a:
+//        viewModelScope.launch {
+//            _uiEvent.emit(UiEvent.ShowMessage(e.localizedMessage ?: "Error desconocido"))
+//            // Opcional: _saveResult.emit(Resource.Error(...)) si quieres un manejo dual
+//        }
     }
 
     // Modificado para usar listas inmutables, generar UUID y devolver el trigger añadido
-    fun addTrigger(trigger: Trigger): Trigger { // Devuelve el trigger añadido (con UUID) - asumimos que siempre se añade
+    fun addTrigger(trigger: Trigger): Resource<Trigger> { // Devuelve Resource<Trigger> para indicar éxito o error
         Timber.d("ViewModel: addTrigger called with: ${trigger.triggerType}") // Log add call
-        val triggerToAdd = if (trigger.uuid.isEmpty()) {
-            trigger.copy(uuid = UUID.randomUUID().toString())
-        } else {
-            trigger
+
+        // ** NEW: Check for existing trigger of the same type **
+        val existingTrigger = _triggers.value.find { it.triggerType == trigger.triggerType }
+        if (existingTrigger != null) {
+                val errorMessage = "Ya existe un trigger de tipo ${trigger.triggerType} para esta rutina. Solo se permite uno de cada tipo."
+                Timber.w("Attempted to add duplicate trigger type: ${trigger.triggerType}")
+                return Resource.Error(errorMessage) // Return an error resource
         }
+
+        // ** END NEW **
+        val triggerToAdd = if (trigger.uuid.isEmpty() || trigger.uuid == "0") { // Consider "0" as well if that's a possible initial state
+                 trigger.copy(uuid = UUID.randomUUID().toString())
+             } else {
+                 trigger
+             }
+
+        
         // Crear una nueva lista con el trigger añadido y emitir
         _triggers.update { currentTriggers ->
             currentTriggers + triggerToAdd
         }
         Timber.d("Trigger añadido a la lista del ViewModel: ${triggerToAdd.uuid}. Lista total size: ${_triggers.value.size}")
-        return triggerToAdd // Devuelve el trigger añadido con el UUID
+        return Resource.Success(triggerToAdd) // Return a success resource with the added trigger
     }
 
     // Modificado para usar listas inmutables y crear una nueva lista

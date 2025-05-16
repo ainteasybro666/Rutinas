@@ -1,88 +1,3 @@
-// Action.kt
-
-package com.example.rutinas.data.model
-
-
-@Parcelize
-@Entity(
-    tableName = "actions",
-    foreignKeys = [
-        ForeignKey(
-            entity = RoutineEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["routineId"],
-            onDelete = ForeignKey.CASCADE
-        )
-    ],
-    indices = [Index(value = ["routineId"], name = "idx_action_routine_id")]
-)
-data class Action(
-    @PrimaryKey(autoGenerate = true)
-    val id: Long = 0,
-    var uuid: String = UUID.randomUUID().toString(),
-    val actionType: ActionType,
-    val routineId: Long,
-    @ColumnInfo(name = "data")
-    val data: DataWrapper? = null,
-    var executionOrder: Int,
-    val pauseDuration: Long? = null
-) : Parcelable {
-    fun getString(key: String): String? = data?.data?.get(key) as? String
-    fun getInt(key: String): Int? = (data?.data?.get(key) as? Number)?.toInt()
-    fun getBoolean(key: String): Boolean? = data?.data?.get(key) as? Boolean
-
-    // Propiedades calculadas para la UI
-    val title: String
-        get() = when (actionType) {
-            ActionType.ANNOUNCEMENT -> "Anuncio"
-            ActionType.ALARM -> "Alarma"
-            ActionType.READ_NOTIFICATIONS -> "Leer Notificaciones"
-            ActionType.TIME -> "Decir Hora"
-            ActionType.VOLUME -> "Ajustar Volumen"
-            ActionType.BRIGHTNESS -> "Ajustar Brillo"
-            ActionType.SOUND_MODE -> "Modo de Sonido"
-            ActionType.PAUSE -> "Pausa"
-        }
-
-    val description: String
-        get() = when (actionType) {
-            ActionType.ANNOUNCEMENT -> getString("message") ?: "Sin mensaje"
-            ActionType.ALARM -> "Alarma: ${getString("time") ?: "No configurada"}"
-            ActionType.READ_NOTIFICATIONS -> "Leer notificaciones activas"
-            ActionType.TIME -> "Informar hora actual"
-            ActionType.VOLUME -> {
-                val volumes = mutableListOf<String>()
-                if (getInt("mediaVolume") != null) volumes.add("Media")
-                if (getInt("ringtoneVolume") != null) volumes.add("Ringtone")
-                if (getInt("alarmVolume") != null) volumes.add("Alarma")
-                "Ajustar volumen: ${volumes.joinToString(", ")}"
-            }
-            ActionType.BRIGHTNESS -> "Brillo: ${getInt("level")}%"
-            ActionType.SOUND_MODE -> when (getString("mode")) {
-                "silent" -> "Modo silencioso"
-                "vibrate" -> "Modo vibración"
-                else -> "Modo no especificado"
-            }
-            ActionType.PAUSE -> "Pausa: ${getInt("duration")} segundos"
-        }
-
-    companion object {
-        fun createAction(
-            routineId: Long,
-            actionType: ActionType,
-            data: DataWrapper?,
-            executionOrder: Int
-        ): Action {
-            return Action(
-                routineId = routineId,
-                actionType = actionType,
-                data = data,
-                executionOrder = executionOrder
-            )
-        }
-    }
-}
-
 // Trigger.kt
 
 package com.example.rutinas.data.model
@@ -112,33 +27,481 @@ data class Trigger(
     val data: DataWrapper
 ) : Parcelable
 
+// Triggerdao.kt
+
+package com.example.rutinas.data.local.dao
+
+
+@Dao
+interface TriggerDao {
+    @Insert
+    suspend fun insertTrigger(trigger: Trigger)
+
+    @Query("SELECT * FROM triggers WHERE routineId = :routineId")
+    suspend fun getTriggersForRoutine(routineId: Long): List<Trigger>
+
+    @Query("DELETE FROM triggers WHERE routineId = :routineId")
+    suspend fun deleteTriggersForRoutine(routineId: Long)
+
+    @Insert
+    suspend fun insert(trigger: Trigger)
+
+    @Update
+    suspend fun update(trigger: Trigger)
+
+    @Delete
+    suspend fun delete(trigger: Trigger)
+}
+
+// Triggeradapter.kt
+
+package com.example.rutinas.ui.main.adapter
+
+
+class TriggerAdapter(
+    private val onTriggerDeleted: (Trigger) -> Unit,
+    private val onTriggerClicked: (Trigger) -> Unit
+) : ListAdapter<Trigger, TriggerAdapter.TriggerViewHolder>(TriggerDiffCallback()) {
+
+    inner class TriggerViewHolder(
+        private val binding: ItemTriggerBinding
+    ) : RecyclerView.ViewHolder(binding.root) {
+
+        fun bind(trigger: Trigger) {
+            Timber.d("TriggerViewHolder: Binding trigger with UUID: ${trigger.uuid}, Type: ${trigger.triggerType}") // Log binding call
+            with(binding) {
+                // Configurar el texto según el tipo de trigger
+                when (trigger.triggerType) {
+                    "TIME" -> {
+                        val hour = trigger.data.data["hour"] as? Int
+                        val minute = trigger.data.data["minute"] as? Int
+                        val frequency = trigger.data.data["frequency"] as? String
+                        val daysOfWeek = trigger.data.data["daysOfWeek"] as? List<Int>
+                        val dayOfMonth = trigger.data.data["dayOfMonth"] as? Int
+
+                        val timeText =
+                            if (hour != null && minute != null) String.format("%02d:%02d", hour, minute) else "Hora no especificada"
+
+                        tvTriggerType.text = "Tiempo"
+                        tvTriggerDetails.text = when (frequency) {
+                            "daily" -> "Diario a las $timeText"
+                            "weekly" -> "Semanalmente a las $timeText los días ${formatSelectedDays(daysOfWeek)}"
+                            "monthly" -> "Mensualmente el día $dayOfMonth a las $timeText"
+                            else -> "A las $timeText" // Fallback
+                        }
+                    }
+
+                    "CALENDAR" -> {
+                        val day = trigger.data.data["day"] as? Int
+                        val month = trigger.data.data["month"] as? Int
+                        val year = trigger.data.data["year"] as? Int
+
+                        tvTriggerType.text = "Calendario"
+                        tvTriggerDetails.text = if (day != null && month != null && year != null) {
+                            String.format("El %02d/%02d/%d", day, month + 1, year) // month is 0-indexed
+                        } else {
+                            "Fecha no especificada"
+                        }
+                    }
+
+                    "LOCATION" -> {
+                        val latitude = trigger.data.data["latitude"] as? Double
+                        val longitude = trigger.data.data["longitude"] as? Double
+
+                        tvTriggerType.text = "Ubicación"
+                        tvTriggerDetails.text = if (latitude != null && longitude != null) {
+                            String.format("Lat: %.4f, Long: %.4f", latitude, longitude)
+                        } else {
+                            "Ubicación no especificada"
+                        }
+                    }
+
+                    else -> {
+                        tvTriggerType.text = "Desconocido"
+                        tvTriggerDetails.text = "Tipo de trigger desconocido"
+                        Timber.w("Tipo de trigger desconocido: ${trigger.triggerType}")
+                    }
+                }
+
+
+                // Configurar botón de eliminar
+                btnDelete.setOnClickListener {
+                    onTriggerDeleted(trigger)
+                }
+            }
+        }
+
+        private fun formatSelectedDays(days: List<Int>?): String {
+            return days?.map { day ->
+                when (day) {
+                    0 -> "D"
+                    1 -> "L"
+                    2 -> "M"
+                    3 -> "X"
+                    4 -> "J"
+                    5 -> "V"
+                    6 -> "S"
+                    else -> "?"
+                }
+            }?.joinToString(", ") ?: ""
+        }
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TriggerViewHolder {
+        val binding = ItemTriggerBinding.inflate(
+            LayoutInflater.from(parent.context),
+            parent,
+            false
+        )
+        return TriggerViewHolder(binding)
+    }
+
+    override fun onBindViewHolder(holder: TriggerViewHolder, position: Int) {
+        holder.bind(getItem(position))
+    }
+
+    class TriggerDiffCallback : DiffUtil.ItemCallback<Trigger>() {
+        override fun areItemsTheSame(oldItem: Trigger, newItem: Trigger): Boolean = oldItem.id == newItem.id
+        override fun areContentsTheSame(oldItem: Trigger, newItem: Trigger): Boolean = oldItem == newItem
+    }
+}
+
+// Calendartriggerdialog.kt
+
+package com.example.rutinas.ui.edit.dialogs
+
+
+class CalendarTriggerDialog : DialogFragment() {
+    interface CalendarTriggerListener {
+        fun onCalendarTriggerConfigured(trigger: Trigger)
+    }
+
+    private var _binding: DialogCalendarTriggerConfigBinding? = null
+    private val binding get() = _binding!!
+    private var calendarTriggerListener: CalendarTriggerListener? = null
+
+    private var routineId: Long = 0
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        Timber.d("CalendarTriggerDialog: onCreateDialog() llamado")
+        _binding = DialogCalendarTriggerConfigBinding.inflate(LayoutInflater.from(context))
+
+        routineId = arguments?.getLong("routineId") ?: 0
+
+        val calendar = Calendar.getInstance()
+        val currentYear = calendar.get(Calendar.YEAR)
+        val currentMonth = calendar.get(Calendar.MONTH)
+        val currentDay = calendar.get(Calendar.DAY_OF_MONTH)
+
+        binding.datePicker.init(currentYear, currentMonth, currentDay, null)
+
+        return AlertDialog.Builder(requireContext())
+            .setView(binding.root)
+            .setPositiveButton("Aceptar") { _, _ -> configureCalendarTrigger() }
+            .setNegativeButton("Cancelar") { _, _ -> dismiss() }
+            .create()
+    }
+
+    private fun configureCalendarTrigger() {
+        Timber.d("CalendarTriggerDialog: configureCalendarTrigger() llamado")
+        val day = binding.datePicker.dayOfMonth
+        val month = binding.datePicker.month
+        val year = binding.datePicker.year
+
+        val trigger = Trigger(
+            routineId = routineId,
+            triggerType = "CALENDAR",
+            data = DataWrapper(
+                mapOf(
+                    "day" to day,
+                    "month" to month,
+                    "year" to year
+                )
+            )
+        )
+        calendarTriggerListener?.onCalendarTriggerConfigured(trigger)
+    }
+
+    fun setCalendarTriggerListener(listener: CalendarTriggerListener) {
+        this.calendarTriggerListener = listener
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
+    }
+
+    companion object {
+        fun createInstance(routineId: Long): CalendarTriggerDialog {
+            val dialog = CalendarTriggerDialog()
+            val args = Bundle()
+            args.putLong("routineId", routineId)
+            dialog.arguments = args
+            return dialog
+        }
+    }
+}
+
+// Timetriggerconfigdialog.kt
+
+package com.example.rutinas.ui.edit.dialogs
+
+
+class TimeTriggerConfigDialog : DialogFragment() {
+    interface TimeTriggerConfigListener {
+        fun onTimeTriggerConfigured(trigger: Trigger)
+    }
+
+    private var _binding: DialogTimeTriggerConfigBinding? = null
+    private val binding get() = _binding!!
+    private var timeTriggerConfigListener: TimeTriggerConfigListener? = null
+
+    private var routineId: Long = 0
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        Timber.d("TimeTriggerConfigDialog: onCreateDialog() llamado")
+        _binding = DialogTimeTriggerConfigBinding.inflate(LayoutInflater.from(context))
+        setupUI()
+
+        routineId = arguments?.getLong("routineId") ?: 0
+
+        return AlertDialog.Builder(requireContext())
+            .setView(binding.root)
+            .setPositiveButton("Aceptar") { _, _ -> configureTimeTrigger() }
+            .setNegativeButton("Cancelar") { _, _ -> dismiss() }
+            .create()
+    }
+
+    private fun setupUI() {
+        val rgFrequency = binding.rgFrequency
+        val rbOnce = binding.rbOnce
+        val rbWeekly = binding.rbWeekly
+        val rbMonthly = binding.rbMonthly
+        val daysOfWeekGroup = binding.daysOfWeekGroup
+        val dayOfMonth = binding.dayOfMonth
+
+        // Listener para el RadioGroup
+        rgFrequency.setOnCheckedChangeListener { _, checkedId ->
+            when (checkedId) {
+                rbOnce.id -> {
+                    daysOfWeekGroup.visibility = View.GONE
+                    dayOfMonth.visibility = View.GONE
+                }
+                rbWeekly.id -> {
+                    daysOfWeekGroup.visibility = View.VISIBLE
+                    dayOfMonth.visibility = View.GONE
+                }
+                rbMonthly.id -> {
+                    daysOfWeekGroup.visibility = View.GONE
+                    dayOfMonth.visibility = View.VISIBLE
+                    dayOfMonth.minValue = 1
+                    dayOfMonth.maxValue = 31
+                    dayOfMonth.value = 1
+                }
+            }
+        }
+        rbOnce.isChecked = true // Set default checked radio button
+    }
+
+    private fun configureTimeTrigger() {
+        Timber.d("TimeTriggerConfigDialog: configureTimeTrigger() llamado")
+        val hour = binding.timePicker.hour
+        val minute = binding.timePicker.minute
+        val frequency = when (binding.rgFrequency.checkedRadioButtonId) {
+            binding.rbWeekly.id -> "weekly"
+            binding.rbMonthly.id -> "monthly"
+            else -> "once" // Default to "once" if no other option is selected
+        }
+        val daysOfWeek = if (frequency == "weekly") {
+            listOf(
+                binding.cbSunday.isChecked,
+                binding.cbMonday.isChecked,
+                binding.cbTuesday.isChecked,
+                binding.cbWednesday.isChecked,
+                binding.cbThursday.isChecked,
+                binding.cbFriday.isChecked,
+                binding.cbSaturday.isChecked
+            ).mapIndexedNotNull { index, isChecked -> if (isChecked) index else null }
+        } else {
+            emptyList()
+        }
+        val dayOfMonth = if (frequency == "monthly") {
+            binding.dayOfMonth.value
+        } else {
+            1 // Default to 1 if not monthly
+        }
+
+        val trigger = Trigger(
+            routineId = routineId,
+            triggerType = "TIME",
+            data = DataWrapper(
+                mapOf(
+                    "hour" to hour,
+                    "minute" to minute,
+                    "frequency" to frequency,
+                    "daysOfWeek" to daysOfWeek,
+                    "dayOfMonth" to dayOfMonth
+                )
+            )
+        )
+        timeTriggerConfigListener?.onTimeTriggerConfigured(trigger)
+    }
+
+    fun setTimeTriggerConfigListener(listener: TimeTriggerConfigListener) {
+        this.timeTriggerConfigListener = listener
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
+    }
+
+    companion object {
+        fun createInstance(routineId: Long): TimeTriggerConfigDialog {
+            val dialog = TimeTriggerConfigDialog()
+            val args = Bundle()
+            args.putLong("routineId", routineId)
+            dialog.arguments = args
+            return dialog
+        }
+    }
+}
+
+// Triggertypedialog.kt
+
+package com.example.rutinas.ui.edit.dialogs
+
+
+@AndroidEntryPoint
+class TriggerTypeDialog : DialogFragment() {
+
+    interface TriggerTypeListener {
+        fun onTriggerSelected(triggerType: TriggerType)
+    }
+
+    private var listener: TriggerTypeListener? = null
+    private var _binding: DialogTriggerTypesBinding? = null
+    private val binding get() = _binding!!
+
+    fun setTriggerTypeListener(listener: TriggerTypeListener) {
+        this.listener = listener
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        _binding = DialogTriggerTypesBinding.inflate(inflater, container, false)
+        return binding.root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        binding.btnTimeTrigger.setOnClickListener { selectTrigger(TriggerType.TIME) }
+        binding.btnCalendarTrigger.setOnClickListener { selectTrigger(TriggerType.CALENDAR) }
+        binding.btnLocationTrigger.setOnClickListener { selectTrigger(TriggerType.LOCATION) }
+    }
+
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+        Timber.d("TriggerTypeDialog adjuntado al contexto")
+    }
+
+    private fun selectTrigger(type: TriggerType) {
+        if (isAdded && !isDetached) { // Verificación crítica
+            listener?.onTriggerSelected(type)
+            dismissAllowingStateLoss() // Dismiss seguro
+        } else {
+            Timber.e("No se puede seleccionar trigger: Diálogo no adjunto")
+        }
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
+    }
+
+    enum class TriggerType {
+        TIME, CALENDAR, LOCATION
+    }
+
+    companion object {
+        fun createInstance() = TriggerTypeDialog()
+    }
+}
+
+// Basedialog.kt
+
+package com.example.rutinas.ui.edit.dialogs
+
+
+abstract class BaseDialog : DialogFragment() {
+
+    private var _binding: ViewBinding? = null
+    protected abstract val bindingInflater: (LayoutInflater, ViewGroup?, Boolean) -> ViewBinding
+
+    protected val binding
+        get() = _binding!!
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        return try {
+            val dialog = super.onCreateDialog(savedInstanceState)
+            dialog
+        } catch (e: Exception) {
+            AlertDialog.Builder(requireContext())
+                .setTitle("Error")
+                .setMessage("No se pudo cargar la configuración: ${e.message}")
+                .setPositiveButton("Aceptar") { _, _ ->
+                    dismiss()
+                }.create()
+        }
+    }
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        _binding = bindingInflater.invoke(inflater, container, false)
+        return binding.root
+    }
+    fun showDialog(dialog: DialogFragment){
+        dialog.show(parentFragmentManager, dialog::class.java.simpleName)
+    }
+}
+
 // Alarmscheduler.kt
 
 package com.example.rutinas.alarms
 
 
+@Singleton
 class AlarmScheduler @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val routineRepository: RoutineRepository // Inject RoutineRepository here
+    private val routineRepository: RoutineRepository
 ) {
 
     private val alarmManager: AlarmManager =
         context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
-    fun schedule(routine: Routine) {
+    suspend fun schedule(routine: Routine) {
         Timber.d("Programando alarmas para la rutina: ${routine.uuid}, ${routine.name}")
 
         // Cancelar alarmas existentes antes de programar nuevas
         cancel(routine)
+
+        // NEW: Only schedule if the routine is enabled
+        if (!routine.isEnabled) {
+            Timber.d("Rutina ${routine.name} (${routine.uuid}) está deshabilitada. No se programarán alarmas.")
+            return
+        }
 
         routine.triggers.filter { it.triggerType == "TIME" }
             .forEach { trigger -> scheduleTimeTrigger(routine, trigger) }
     }
 
     private fun scheduleTimeTrigger(routine: Routine, trigger: Trigger) {
-        //Comprobamos que el dataWrapper no sea nulo.
         val dataWrapper = trigger.data ?: return
-        //Comprobamos que el mapa no sea nulo
         val mapData = dataWrapper.data ?: return
 
         val hour = mapData["hour"] as? Int
@@ -155,7 +518,6 @@ class AlarmScheduler @Inject constructor(
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
 
-            // Primero: ajustar para ocurrencias pasadas
             when (frequency) {
                 "daily" -> if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_MONTH, 1)
                 "weekly" -> {
@@ -170,7 +532,6 @@ class AlarmScheduler @Inject constructor(
                 "monthly" -> if (timeInMillis <= System.currentTimeMillis()) add(Calendar.MONTH, 1)
             }
 
-            // Segundo: ajustes adicionales según frecuencia
             when (frequency) {
                 "weekly" -> {
                     val daysOfWeek = mapData["daysOfWeek"] as? List<Int> ?: return@apply
@@ -190,7 +551,6 @@ class AlarmScheduler @Inject constructor(
         val alarmId = generateAlarmId(routine, trigger)
         val pendingIntent = createPendingIntent(routine, alarmId)
 
-        // Log usando la variable 'frequency' declarada fuera del apply
         Timber.d("Programando alarma $frequency para $hour:$minute (${routine.name}), id: $alarmId, time: ${calendar.time}")
 
         if (canScheduleExactAlarms()) {
@@ -201,7 +561,7 @@ class AlarmScheduler @Inject constructor(
         }
     }
 
-    fun cancel(routine: Routine) {
+    suspend fun cancel(routine: Routine) {
         Timber.d("Cancelando alarmas para la rutina: ${routine.uuid}, ${routine.name}")
         routine.triggers.filter { it.triggerType == "TIME" }.forEach { trigger ->
             cancelTimeTrigger(routine, trigger)
@@ -215,32 +575,17 @@ class AlarmScheduler @Inject constructor(
         Timber.d("Alarma cancelada para ${routine.name}, id: $alarmId")
     }
 
+    // CORRECTED: This function only generates the alarm ID
     private fun generateAlarmId(routine: Routine, trigger: Trigger): Int {
         // Combine routine UUID and a trigger identifier to create a unique ID
         return "${routine.uuid}-${trigger.uuid}".hashCode()
     }
 
-    // Now this method uses RoutineRepository to get the RoutineEntity
-    private suspend fun getRoutineEntityByUuid(uuid: String): RoutineEntity? {
-        Timber.d("Buscando rutina en la base de datos con UUID: $uuid")
-        val routine = routineRepository.getRoutineByUuid(uuid)
-        return routine?.let { // Convertir de Routine a RoutineEntity
-            RoutineEntity(
-                id = it.id,
-                uuid = it.uuid,
-                name = it.name,
-                description = it.description,
-                isEnabled = it.isEnabled,
-                createdDate = it.createdDate
-            )
-        }
-    }
-
+    // CORRECTED: This function creates the PendingIntent
     private fun createPendingIntent(routine: Routine, alarmId: Int): PendingIntent {
-        //  Obtener la RoutineEntity a partir del UUID.  Adaptar esto según tu implementación.
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId)
-            putExtra(AlarmReceiver.EXTRA_ROUTINE_UUID, routine.uuid)  // Pasar UUID
+            putExtra(AlarmReceiver.EXTRA_ROUTINE_UUID, routine.uuid) // Pasar UUID
         }
         return PendingIntent.getBroadcast(
             context,
@@ -249,6 +594,7 @@ class AlarmScheduler @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
+
 
     suspend fun rescheduleAll() {
         Timber.d("Reprogramando todas las alarmas...")
@@ -263,350 +609,8 @@ class AlarmScheduler @Inject constructor(
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             alarmManager.canScheduleExactAlarms()
         } else {
-            true // En versiones anteriores a Android 12, no hay restricciones
+            true
         }
-    }
-}
-
-// Routineexecutor.kt
-
-package com.example.rutinas.execution
-
-
-class RoutineExecutor @Inject constructor(
-    @ApplicationContext private val context: Context
-) {
-
-    companion object {
-        private const val CHANNEL_ID = "RoutineNotifications"
-    }
-
-    private val notificationManager = ContextCompat.getSystemService(context, NotificationManager::class.java)
-    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    private var textToSpeech: TextToSpeech? = null
-    private val notificationReader = NotificationReader(context)
-
-
-    init {
-        createNotificationChannel()
-        initializeTextToSpeech()
-        notificationReader.initialize {}
-    }
-
-
-    fun executeRoutine(routine: Routine, alarmId: Int) {
-        Timber.d("RoutineExecutor: executeRoutine called")
-        Timber.i("RoutineExecutor: Executing routine: ${routine.name} (${routine.uuid}), triggered by alarmId: $alarmId")
-
-        val handler = Handler(Looper.getMainLooper())
-        CoroutineScope(Dispatchers.Main).launch {
-            for (action in routine.actions) {
-                runCatching { executeAction(action, handler) }
-                    .onFailure { Timber.e(it, "Error executing action: $action") }
-            }
-            Timber.i("RoutineExecutor: Finished executing routine: ${routine.name}")
-        }
-    }
-
-    private suspend fun executeAction(action: Action, handler: Handler) {
-        Timber.d("RoutineExecutor: executeAction called")
-        Timber.d("RoutineExecutor: Executing action: ${action.actionType}, data: ${action.data}, action id: ${action.uuid}")
-        val actionType = action.actionType
-        when (actionType) {
-            ActionType.ALARM -> handleAlarmAction(action.data?.data)
-            ActionType.ANNOUNCEMENT -> handleAnnouncementAction(action.data?.data, handler)
-            ActionType.BRIGHTNESS -> handleBrightnessAction(action.data?.data)
-            ActionType.READ_NOTIFICATIONS -> handleReadNotificationsAction(action.data?.data)
-            ActionType.SOUND_MODE -> handleSoundModeAction(action.data?.data)
-            ActionType.TIME -> handleTimeAction(handler)
-            ActionType.VOLUME -> handleVolumeAction(action.data?.data)
-            ActionType.PAUSE -> handlePauseAction(action)
-            else -> Timber.w("RoutineExecutor: Unknown action type: ${action.actionType}")
-        }
-    }
-
-    private fun handleAlarmAction(data: Map<String, Any>?) {
-        Timber.d("RoutineExecutor: handleAlarmAction called")
-        val duration = (data?.get("duration") as? Number)?.toInt() ?: 30
-        val repeatEnabled = data?.get("repeatEnabled") as? Boolean ?: false
-
-        Timber.i("RoutineExecutor: Triggering ALARM action - duration: $duration, repeat: $repeatEnabled")
-
-        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        val notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-        val ringtone = RingtoneManager.getRingtone(context, notificationUri)
-
-        val pattern = longArrayOf(0, 500, 200, 500) // Vibrate for 500ms, pause for 200ms, repeat
-        val vibrationEffect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            VibrationEffect.createWaveform(pattern, 0)
-        } else {
-            null
-        }
-
-        try {
-            ringtone.play()
-            if (vibrationEffect != null) {
-                vibrator.vibrate(vibrationEffect)
-            } else {
-                vibrator.vibrate(pattern, 0) // Older versions
-            }
-
-            displayNotification(
-                mapOf(
-                    "title" to "Alarm Triggered",
-                    "text" to "An alarm action has been triggered."
-                )
-            )
-        } catch (e: Exception) {
-            Timber.e(e, "Error playing alarm")
-        }
-
-        if (repeatEnabled) {
-            //TODO implement repeating alarm
-            Timber.w("Repeating alarms not implemented yet")
-        }
-        val handler = Handler(Looper.getMainLooper())
-        handler.postDelayed({
-            ringtone.stop()
-            vibrator.cancel()
-        }, duration * 1000L.toLong())
-    }
-
-
-    private fun handleAnnouncementAction(data: Map<String, Any>?, handler: Handler) {
-        Timber.d("RoutineExecutor: handleAnnouncementAction called")
-        val message = data?.get("message") as? String ?: ""
-        // val volume = (data?.get("volume") as? Number)?.toInt() ?: 50  // Unused for now
-
-        Timber.i("RoutineExecutor: Displaying ANNOUNCEMENT action - message: \"$message\"")
-
-        if (message.isNotBlank()) {
-            handler.post {
-                speakText(message)
-            }
-        }
-        //  TODO: Decide how to use the volume parameter (if needed).
-        //  It's not clear from the fragment how this volume is supposed to be applied.
-    }
-
-
-    private fun handleBrightnessAction(data: Map<String, Any>?) {
-        Timber.d("RoutineExecutor: handleBrightnessAction called")
-        val brightness = (data?.get("brightness") as? Number)?.toInt() ?: 50
-        val brightnessFloat = brightness / 100f
-
-        Timber.i("RoutineExecutor: Adjusting BRIGHTNESS action - brightness: $brightness ($brightnessFloat)")
-
-        try {
-            // Check if WRITE_SETTINGS permission is granted
-            if (Settings.System.canWrite(context)) {
-                // Set system brightness (requires WRITE_SETTINGS permission)
-                Settings.System.putInt(
-                    context.contentResolver,
-                    Settings.System.SCREEN_BRIGHTNESS,
-                    (brightnessFloat * 255).toInt() // Convert percentage to 0-255 range
-                )
-            } else {
-                Timber.w("RoutineExecutor: Cannot adjust brightness - WRITE_SETTINGS permission not granted.")
-                displayNotification(
-                    mapOf(
-                        "title" to "Permission Required",
-                        "text" to "Rutinas needs permission to change brightness."
-                    )
-                )
-            }
-        } catch (e: SecurityException) {
-            Timber.e("RoutineExecutor: SecurityException while adjusting brightness: ${e.message}")
-            displayNotification(
-                mapOf(
-                    "title" to "Permission Error",
-                    "text" to "Rutinas encountered an error while changing brightness."
-                )
-            )
-        } catch (e: Exception) {
-            Timber.e("RoutineExecutor: Error adjusting brightness: ${e.message}")
-        }
-    }
-
-    private fun handleReadNotificationsAction(data: Map<String, Any>?) {
-        Timber.d("RoutineExecutor: handleReadNotificationsAction called")
-        val excludedPackages = (data?.get("excludedPackages") as? String)
-            ?.split(",")
-            ?.map { it.trim() }
-            ?.filter { it.isNotEmpty() }
-            ?: emptyList()
-        val delay = (data?.get("delay") as? Number)?.toInt() ?: 0
-
-        Timber.i("RoutineExecutor: Executing READ_NOTIFICATIONS action - excluded: $excludedPackages, delay: $delay")
-
-        // Check for Notification Listener Permission
-        if (isNotificationListenerEnabled()) {
-            Handler(Looper.getMainLooper()).postDelayed({
-                notificationManager?.activeNotifications?.let { notifications ->
-                    notificationReader.readNotifications(notifications, excludedPackages) {}
-                }
-            }, delay * 1000L)
-        } else {
-            Timber.w("RoutineExecutor: Notification Listener not enabled. Cannot read notifications")
-            displayNotification(
-                mapOf(
-                    "title" to "Permission Required",
-                    "text" to "Rutinas needs Notification Access to read notifications"
-                )
-            )
-        }
-    }
-
-    private fun isNotificationListenerEnabled(): Boolean {
-        val enabledListeners = Settings.Secure.getString(
-            context.contentResolver,
-            "enabled_notification_listeners"
-        )
-        return enabledListeners?.contains(context.packageName + "/" + NotificationReader::class.java.name) ?: false
-    }
-
-
-
-    private fun handleSoundModeAction(data: Map<String, Any>?) {
-        Timber.d("RoutineExecutor: handleSoundModeAction called")
-        val mode = data?.get("mode") as? String ?: "normal"
-
-        Timber.i("RoutineExecutor: Adjusting SOUND_MODE action - mode: $mode")
-
-        try {
-            when (mode) {
-                "silent" -> audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
-                "vibrate" -> audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
-                "normal" -> audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
-                else -> Timber.w("RoutineExecutor: Invalid sound mode: $mode")
-            }
-        } catch (e: SecurityException) {
-            Timber.e("RoutineExecutor: SecurityException while adjusting sound mode: ${e.message}")
-            displayNotification(
-                mapOf(
-                    "title" to "Permission Required",
-                    "text" to "Rutinas needs permission to change sound mode."
-                )
-            )
-        } catch (e: Exception) {
-            Timber.e("RoutineExecutor: Error adjusting sound mode: ${e.message}")
-        }
-    }
-
-    private fun handleTimeAction(handler: Handler) {
-        Timber.d("RoutineExecutor: handleTimeAction called")
-        Timber.i("RoutineExecutor: Executing TIME action - reading current time")
-        val calendar = Calendar.getInstance()
-        val sdf = SimpleDateFormat("h:mm a", Locale.getDefault()) // Format: 3:20 PM
-        val formattedTime = sdf.format(calendar.time)
-        val message = "Son las $formattedTime"
-
-        handler.post {
-            speakText(message)
-        }
-    }
-
-
-    private fun handleVolumeAction(data: Map<String, Any>?) {
-        Timber.d("RoutineExecutor: handleVolumeAction called")
-        Timber.i("RoutineExecutor: Adjusting VOLUME action - data: $data")
-
-        try {
-            data?.forEach { (streamType, volume) ->
-                val volumePercentage = (volume as? Number)?.toInt()
-                if (volumePercentage != null) {
-                    val stream = when (streamType) {
-                        "mediaVolume" -> AudioManager.STREAM_MUSIC
-                        "ringtoneVolume" -> AudioManager.STREAM_RING
-                        "alarmVolume" -> AudioManager.STREAM_ALARM
-                        else -> {
-                            Timber.w("RoutineExecutor: Unknown volume type: $streamType")
-                            null
-                        }
-                    }
-
-                    stream?.let {
-                        val maxVolume = audioManager.getStreamMaxVolume(it)
-                        val volumeLevel = (volumePercentage / 100f * maxVolume).toInt()
-                        audioManager.setStreamVolume(it, volumeLevel, 0)  // Flags = 0 (no UI)
-                        Timber.d("RoutineExecutor: Set $streamType volume to $volumePercentage% (level: $volumeLevel / $maxVolume)")
-                    }
-                }
-            }
-        } catch (e: SecurityException) {
-            Timber.e("RoutineExecutor: SecurityException while adjusting volume: ${e.message}")
-            displayNotification(
-                mapOf(
-                    "title" to "Permission Required",
-                    "text" to "Rutinas needs permission to change volume settings."
-                )
-            )
-        } catch (e: Exception) {
-            Timber.e("RoutineExecutor: Error adjusting volume: ${e.message}")
-        }
-    }
-
-    private suspend fun handlePauseAction(action: Action) {
-        Timber.d("RoutineExecutor: handlePauseAction called")
-        val duration = action.pauseDuration
-        if (duration != null) {
-            Timber.i("RoutineExecutor: Pausing for $duration ms")
-            delay(duration)
-            Timber.i("RoutineExecutor: Pause completed")
-        } else {
-            Timber.w("RoutineExecutor: Pause duration not specified for action: $action")
-        }
-    }
-
-
-    private fun displayNotification(data: Map<String, String>) {
-        val title = data["title"] ?: "Routine Notification"
-        val text = data["text"] ?: "A routine action was triggered."
-
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .build()
-
-        notificationManager?.notify(System.currentTimeMillis().toInt(), notification)
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = "Routine Notifications"
-            val descriptionText = "Notifications for routine actions"
-            val importance = NotificationManager.IMPORTANCE_DEFAULT
-            val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
-                description = descriptionText
-            }
-            // Register the channel with the system
-            notificationManager?.createNotificationChannel(channel)
-        }
-    }
-
-    private fun initializeTextToSpeech() {
-        textToSpeech = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                val result = textToSpeech?.setLanguage(Locale.getDefault())
-                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    Timber.e("TTS: The specified language is not supported")
-                }
-            } else {
-                Timber.e("TTS: TextToSpeech initialization failed")
-            }
-        }
-    }
-
-    private fun speakText(text: String) {
-        textToSpeech?.speak(text, TextToSpeech.QUEUE_ADD, null, null)
-    }
-
-    fun shutdown() {
-        textToSpeech?.stop()
-        textToSpeech?.shutdown()
-        notificationReader.shutdown()
     }
 }
 
@@ -620,7 +624,6 @@ class AlarmReceiver : BroadcastReceiver() {
 
     @Inject lateinit var routineRepository: RoutineRepository
     @Inject lateinit var routineExecutor: RoutineExecutor
-    // Si quieres reprogramar tiempo de triggers, también puedes inyectar AlarmScheduler
     @Inject lateinit var alarmScheduler: AlarmScheduler
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -629,15 +632,26 @@ class AlarmReceiver : BroadcastReceiver() {
         Timber.d("AlarmReceiver: Received alarm id=$alarmId, uuid=$uuid")
 
         CoroutineScope(Dispatchers.IO).launch {
-            // Obtiene rutina del repositorio
             val routine = routineRepository.getRoutineByUuid(uuid)
             if (routine != null) {
-                // Ejecuta la rutina
-                routineExecutor.executeRoutine(routine, alarmId)
-                // Opcional: si necesitas reprogramar futuros triggers:
-                alarmScheduler.schedule(routine)
+                if (routine.isEnabled) {
+                    Timber.i("AlarmReceiver: Routine ${routine.name} (${routine.uuid}) is enabled. Executing.")
+                    routineExecutor.executeRoutine(routine, alarmId)
+                    alarmScheduler.schedule(routine)
+                } else {
+                    Timber.i("AlarmReceiver: Routine ${routine.name} (${routine.uuid}) is disabled. Skipping execution.")
+                    alarmScheduler.cancel(routine)
+                    Handler(Looper.getMainLooper()).post {
+                        Toast.makeText(context, "Rutina '${routine.name}' está deshabilitada", Toast.LENGTH_SHORT).show()
+                    }
+                }
             } else {
                 Timber.w("Routine no encontrada para uuid=$uuid")
+                // CORRECTED: Provide a placeholder name for the dummy Routine
+                alarmScheduler.cancel(Routine(uuid = uuid, name = "Unknown Routine"))
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(context, "Rutina desconocida (UUID: $uuid) disparada", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }

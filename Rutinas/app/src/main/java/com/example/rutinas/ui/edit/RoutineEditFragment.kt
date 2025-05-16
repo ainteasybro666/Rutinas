@@ -8,12 +8,14 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContentProviderCompat.requireContext
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewbinding.ViewBinding
@@ -81,6 +83,10 @@ class RoutineEditFragment : BaseFragment(),
     // y se limpiará después de mostrar el diálogo.
     private var actionToConfigure: Action? = null
 
+    // Declara las instancias de tus diálogos
+    private lateinit var timeTriggerConfigDialog: TimeTriggerConfigDialog
+    private lateinit var calendarTriggerDialog: CalendarTriggerDialog
+
 
     override fun inflateBinding(
         inflater: LayoutInflater,
@@ -105,7 +111,7 @@ class RoutineEditFragment : BaseFragment(),
         setupUI()
         setupTriggersRecyclerView()
         setupActionsRecyclerView()
-        setupObservers() // Aquí configuramos los observadores
+//        setupObservers() // Aquí configuramos los observadores
 
         // Cargar datos si se está editando una rutina existente, o inicializar para una nueva
         val routineUuid = args.routineUuid
@@ -114,12 +120,113 @@ class RoutineEditFragment : BaseFragment(),
 
         // Configurar la Toolbar del fragmento (VISUALMENTE, NO como ActionBar)
         vb.toolbar.title = if (routineUuid == null) "Nueva Rutina" else "Editar Rutina"
-        vb.toolbar.navigationIcon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_arrow_back)
+        vb.toolbar.navigationIcon =
+            ContextCompat.getDrawable(requireContext(), R.drawable.ic_arrow_back)
         vb.toolbar.setNavigationOnClickListener {
             Timber.d("RoutineEditFragment: Back button clicked on fragment toolbar. Navigating up.")
             findNavController().navigateUp() // Navegar hacia arriba
         }
         Timber.d("RoutineEditFragment: Fragment Toolbar setup complete.")
+
+        //Triggers
+//        timeTriggerConfigDialog = TimeTriggerConfigDialog()
+//        calendarTriggerDialog = CalendarTriggerDialog()
+
+        // Cargar la rutina cuando la vista es creada
+        viewModel.loadRoutine(args.routineUuid) // Usa el UUID de los argumentos de navegación
+
+        // Observar el StateFlow de triggers en el ViewModel para actualizar la UI
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.triggers.collect { triggers ->
+                    // Aquí deberías actualizar tu RecyclerView o la vista que muestra los triggers
+                    // Por ejemplo, si usas un Adapter:
+                    // triggerAdapter.submitList(triggers)
+                    Timber.d("UI: Lista de triggers actualizada. Total: ${triggers.size}")
+                }
+            }
+        }
+
+        // Observar el StateFlow de acciones en el ViewModel para actualizar la UI
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.actions.collect { actions ->
+                    // Aquí deberías actualizar tu RecyclerView o la vista que muestra las acciones
+                    // Por ejemplo, si usas un Adapter:
+                    // actionAdapter.submitList(actions)
+                    Timber.d("UI: Lista de acciones actualizada. Total: ${actions.size}")
+                }
+            }
+        }
+
+        // Observar los eventos de UI del ViewModel (mensajes de error, etc.)
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiEvent.collect { event ->
+                    when (event) {
+                        is RoutineEditViewModel.UiEvent.ShowMessage -> { // Asegúrate de que UiEvent es accesible (puede ser inner class o en otro archivo)
+                            Toast.makeText(requireContext(), event.message, Toast.LENGTH_SHORT).show()
+                        }
+                        // Manejar otros eventos de UI si los defines
+                    }
+                }
+            }
+        }
+
+
+
+        // Configura los botones o UI para mostrar los diálogos de triggers
+        // Por ejemplo, si tienes un botón para añadir trigger:
+        // Usando el ID del layout: btnAddTrigger
+        vb.btnAddTrigger.setOnClickListener {
+            Timber.d("btnAddTrigger clicked. Showing TriggerTypeDialog.")
+            val triggerTypeDialog = TriggerTypeDialog()
+
+            // PASO CORRECTO: Configurar el Fragment como listener del diálogo de selección de tipo
+            // Asegúrate de que RoutineEditFragment implementa TriggerTypeDialog.TriggerTypeListener
+            // y que has definido el méto-do override fun onTriggerSelected(...)
+            triggerTypeDialog.setTriggerTypeListener(this@RoutineEditFragment) // <-- Pasa la instancia del Fragment
+
+            // PASO CORRECTO: Mostrar el diálogo
+            showDialog(triggerTypeDialog)
+        }
+
+        // Configura el botón de guardar
+        // Usando el ID del layout: btnSaveRoutine
+        vb.btnSaveRoutine.setOnClickListener { // **ADAPTADO**
+            // Usando el ID del layout para el EditText: etRoutineName
+            val routineName = vb.etRoutineName.text.toString().trim() // **ADAPTADO**
+            if (routineName.isEmpty()) {
+                Toast.makeText(requireContext(), "El nombre de la rutina no puede estar vacío.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            viewModel.saveRoutine(routineName)
+        }
+
+        // Observar el resultado de guardar la rutina
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.saveResult.collect { resource ->
+                    when (resource) {
+                        is Resource.Loading -> {
+                            // Mostrar un indicador de carga
+                            Timber.d("UI: Guardando rutina...")
+                        }
+                        is Resource.Success -> {
+                            // Rutina guardada con éxito. Puedes navegar de regreso o mostrar un mensaje.
+                            Toast.makeText(requireContext(), "Rutina guardada con éxito.", Toast.LENGTH_SHORT).show()
+                            Timber.d("UI: Rutina guardada con éxito, ID: ${resource.data}")
+                            // Opcional: findNavController().popBackStack() // Navegar de regreso
+                        }
+                        is Resource.Error -> {
+                            // Mostrar el mensaje de error
+                            Toast.makeText(requireContext(), "Error al guardar rutina: ${resource.message}", Toast.LENGTH_LONG).show()
+                            Timber.e("UI: Error al guardar rutina: ${resource.message}")
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // ELIMINAR: Ya no desconfiguramos la ActionBar de la Activity en onDestroyView
@@ -242,7 +349,8 @@ class RoutineEditFragment : BaseFragment(),
                         // Log para verificar qué acciones se reciben
                         Timber.d("RoutineEditFragment: Actions received: ${actions.map { it.uuid to it.actionType }}")
 
-                        val currentListBeforeUpdate = actionAdapter.currentList.toList() // Copia la lista actual del adapter
+                        val currentListBeforeUpdate =
+                            actionAdapter.currentList.toList() // Copia la lista actual del adapter
                         actionAdapter.submitList(actions.toList()) { // Usa la sobrecarga con Runnable de completado
                             Timber.d("RoutineEditFragment: ActionAdapter submitList completed.")
 
@@ -252,7 +360,8 @@ class RoutineEditFragment : BaseFragment(),
                             actionToConfigure?.let { pendingAction ->
                                 Timber.d("RoutineEditFragment: Checking for pending action to configure: UUID ${pendingAction.uuid}")
                                 // Buscar la acción pendiente en la lista ACTUALIZADA del ViewModel
-                                val configuredAction = actions.find { it.uuid == pendingAction.uuid }
+                                val configuredAction =
+                                    actions.find { it.uuid == pendingAction.uuid }
 
                                 if (configuredAction != null) {
                                     Timber.d("RoutineEditFragment: Found pending action with UUID ${pendingAction.uuid} in updated list.")
@@ -294,6 +403,7 @@ class RoutineEditFragment : BaseFragment(),
                             Resource.Loading -> { /* Show loader if you want */
                                 Timber.d("RoutineEditFragment: Save routine result: Loading")
                             }
+
                             else -> {
                                 Timber.d("RoutineEditFragment: Save routine result: Idle or other state")
                             }
@@ -331,7 +441,8 @@ class RoutineEditFragment : BaseFragment(),
 
         // *** Establecer la acción pendiente de configuración ANTES de añadirla al ViewModel ***
         // Esto es CRUCIAL para que el observer la detecte después de que el ViewModel la procese.
-        actionToConfigure = newAction.copy() // Usa copy para asegurar que es una instancia diferente si es necesario
+        actionToConfigure =
+            newAction.copy() // Usa copy para asegurar que es una instancia diferente si es necesario
 
         // 2. Añadir la acción al ViewModel.
         viewModel.addAction(newAction)
@@ -360,11 +471,16 @@ class RoutineEditFragment : BaseFragment(),
     }
 
     // Modified validateForm to accept trigger and action lists
-    private fun validateForm(name: String, triggers: List<Trigger>, actions: List<Action>): Boolean {
+    private fun validateForm(
+        name: String,
+        triggers: List<Trigger>,
+        actions: List<Action>
+    ): Boolean {
         Timber.d("RoutineEditFragment: Validating form. Name: '$name', Triggers: ${triggers.size}, Actions: ${actions.size}")
         var isValid = true
         if (name.isEmpty()) {
-            vb.etRoutineName.error = "Name required" // Asegúrate de que este string está en resources
+            vb.etRoutineName.error =
+                "Name required" // Asegúrate de que este string está en resources
             isValid = false
             Timber.d("RoutineEditFragment: Validation failed: Name is empty.")
         }
@@ -427,13 +543,18 @@ class RoutineEditFragment : BaseFragment(),
                 dialog.show(childFragmentManager, dialog::class.java.simpleName)
                 Timber.d("RoutineEditFragment: Dialog ${dialog::class.java.simpleName} shown successfully.")
             } catch (e: Exception) {
-                Timber.e(e, "RoutineEditFragment: Error showing dialog ${dialog::class.java.simpleName}")
+                Timber.e(
+                    e,
+                    "RoutineEditFragment: Error showing dialog ${dialog::class.java.simpleName}"
+                )
                 // Opcional: Mostrar un Toast o Snackbar al usuario en caso de error
-                Toast.makeText(requireContext(), "Error displaying dialog", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), "Error displaying dialog", Toast.LENGTH_SHORT)
+                    .show()
             }
         } else {
             Timber.e("RoutineEditFragment: Cannot show dialog ${dialog::class.java.simpleName}: Invalid fragment state or isStateSaved")
-            Toast.makeText(requireContext(), "Cannot open dialog at this time", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "Cannot open dialog at this time", Toast.LENGTH_SHORT)
+                .show()
         }
     }
 
@@ -442,33 +563,27 @@ class RoutineEditFragment : BaseFragment(),
     // Estos métodos se llaman cuando se selecciona un tipo de trigger en el TriggerTypeDialog
     // y luego se configura en su diálogo específico.
     // Asegúrate de que TriggerTypeDialog.TriggerType es el tipo correcto que esperas.
-    override fun onTriggerSelected(triggerType: TriggerTypeDialog.TriggerType) { // Nombre de método corregido
-        Timber.d("RoutineEditFragment: onTriggerTypeSelected called with trigger type: $triggerType")
-        if (!canShowDialog()) {
-            Timber.w("RoutineEditFragment: Cannot proceed with trigger selection, fragment state invalid.")
-            return
-        }
-
-        when (triggerType) {
-            TriggerTypeDialog.TriggerType.TIME -> {
-                val timeDialog = TimeTriggerConfigDialog.createInstance(viewModel.currentRoutine.value?.id ?: 0L) // Pasa el ID de la rutina actual o 0L
+    override fun onTriggerSelected(triggerType: TriggerTypeDialog.TriggerType) {
+        Timber.d("RoutineEditFragment: Trigger type selected: $triggerType")
+        when(triggerType) {
+            TriggerTypeDialog.TriggerType.TIME -> { // Usa el enum directamente
+                val timeDialog = TimeTriggerConfigDialog.createInstance(viewModel.currentRoutine.value?.id ?: 0L)
                 timeDialog.setTimeTriggerConfigListener(this@RoutineEditFragment)
                 showDialog(timeDialog)
             }
-            TriggerTypeDialog.TriggerType.CALENDAR -> {
-                val calendarDialog = CalendarTriggerDialog.createInstance(viewModel.currentRoutine.value?.id ?: 0L) // Pasa el ID de la rutina actual o 0L
+            TriggerTypeDialog.TriggerType.CALENDAR -> { // Usa el enum directamente
+                val calendarDialog = CalendarTriggerDialog.createInstance(viewModel.currentRoutine.value?.id ?: 0L)
                 calendarDialog.setCalendarTriggerListener(this@RoutineEditFragment)
                 showDialog(calendarDialog)
             }
-            TriggerTypeDialog.TriggerType.LOCATION -> {
-                val locationDialog = LocationTriggerDialog.createInstance(viewModel.currentRoutine.value?.id ?: 0L) // Pasa el ID de la rutina actual o 0L
+            TriggerTypeDialog.TriggerType.LOCATION -> { // Usa el enum directamente
+                val locationDialog = LocationTriggerDialog.createInstance(viewModel.currentRoutine.value?.id ?: 0L)
                 locationDialog.setLocationTriggerListener(this@RoutineEditFragment)
                 showDialog(locationDialog)
             }
-            // Añade casos para otros tipos de triggers si existen
             else -> {
-                Timber.w("RoutineEditFragment: No specific config dialog for trigger type: $triggerType")
-                Toast.makeText(requireContext(), "Configuración no disponible para este tipo de trigger", Toast.LENGTH_SHORT).show()
+                Timber.w("RoutineEditFragment: Unhandled TriggerType selected: $triggerType")
+                Toast.makeText(requireContext(), "Tipo de trigger no soportado", Toast.LENGTH_SHORT).show()
             }
         }
         Timber.d("RoutineEditFragment: Trigger config dialog shown for type: $triggerType.")
@@ -478,9 +593,31 @@ class RoutineEditFragment : BaseFragment(),
     // Estos métodos se llaman cuando se configura y guarda un trigger en su diálogo específico.
     // Nombre de método corregido según tu código original.
     override fun onCalendarTriggerConfigured(trigger: Trigger) {
-        Timber.d("RoutineEditFragment: Received configured Calendar trigger in listener: ${trigger.uuid}")
-        viewModel.addTrigger(trigger)
-        Timber.d("RoutineEditFragment: Calendar trigger added to ViewModel.")
+        // Asigna el routineId correcto si la rutina ya existe (después del primer guardado)
+        val currentRoutineId = viewModel.currentRoutine.value?.id ?: 0L // Obtiene el ID actual
+        val triggerWithRoutineId = if (currentRoutineId > 0) {
+            trigger.copy(routineId = currentRoutineId)
+        } else {
+            trigger // Si la rutina es nueva, el routineId se asignará al guardar
+        }
+
+        when (val result = viewModel.addTrigger(triggerWithRoutineId)) {
+            is Resource.Success -> {
+                // Trigger añadido correctamente. Puedes actualizar la UI si es necesario.
+                Timber.d("Trigger de calendario añadido correctamente en la UI.")
+                // Aquí podrías notificar a tu adaptador de triggers
+            }
+
+            is Resource.Error -> {
+                // Mostrar el mensaje de error al usuario
+                Toast.makeText(requireContext(), result.message, Toast.LENGTH_SHORT).show()
+                Timber.w("Error al añadir trigger de calendario: ${result.message}")
+            }
+
+            is Resource.Loading -> {
+                // Opcional: mostrar un indicador de carga
+            }
+        }
     }
 
     // Nombre de método corregido según tu código original.
@@ -490,11 +627,33 @@ class RoutineEditFragment : BaseFragment(),
         Timber.d("RoutineEditFragment: Location trigger added to ViewModel.")
     }
 
-    // Nombre de método corregido según tu código original.
     override fun onTimeTriggerConfigured(trigger: Trigger) {
-        Timber.d("RoutineEditFragment: Received configured Time trigger in listener: ${trigger.uuid}")
-        viewModel.addTrigger(trigger)
-        Timber.d("RoutineEditFragment: Time trigger added to ViewModel.")
+        // Asigna el routineId correcto si la rutina ya existe (después del primer guardado)
+        val currentRoutineId = viewModel.currentRoutine.value?.id ?: 0L // Obtiene el ID actual
+        val triggerWithRoutineId = if (currentRoutineId > 0) {
+            trigger.copy(routineId = currentRoutineId)
+        } else {
+            trigger // Si la rutina es nueva, el routineId se asignará al guardar
+        }
+
+        when (val result = viewModel.addTrigger(triggerWithRoutineId)) {
+            is Resource.Success -> {
+                // Trigger añadido correctamente. Puedes actualizar la UI si es necesario.
+                Timber.d("Trigger de tiempo añadido correctamente en la UI.")
+                // Aquí podrías notificar a tu adaptador de triggers si usas uno
+                // para que la lista en la UI se actualice.
+            }
+
+            is Resource.Error -> {
+                // Mostrar el mensaje de error al usuario
+                Toast.makeText(requireContext(), result.message, Toast.LENGTH_SHORT).show()
+                Timber.w("Error al añadir trigger de tiempo: ${result.message}")
+            }
+
+            is Resource.Loading -> {
+                // Opcional: mostrar un indicador de carga si la operación fuera asíncrona
+            }
+        }
     }
 
     // Métodos navigateToEditAction y openEditActionDialog se mantienen de la parte 2.
@@ -529,6 +688,8 @@ class RoutineEditFragment : BaseFragment(),
         showDialog(dialogFragment) // Usar el helper showDialog
         Timber.d("RoutineEditFragment: Edit dialog shown for action UUID: ${action.uuid}")
     }
+
+
 
     // ELIMINADO: getDialogFragmentForAction ya no es necesario.
     // private fun getDialogFragmentForAction(action: Action): BaseEditActionDialogFragment<*> { ... }
