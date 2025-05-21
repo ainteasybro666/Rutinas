@@ -163,11 +163,18 @@ class RoutineEditFragment : BaseFragment(),
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiEvent.collect { event ->
+                    Timber.d("RoutineEditFragment: Received UI event: $event") // Log para ver qué eventos llegan
                     when (event) {
                         is RoutineEditViewModel.UiEvent.ShowMessage -> { // Asegúrate de que UiEvent es accesible (puede ser inner class o en otro archivo)
                             Toast.makeText(requireContext(), event.message, Toast.LENGTH_SHORT).show()
                         }
-                        // Manejar otros eventos de UI si los defines
+                        // Añade aquí el manejo de otros tipos de eventos de UI si los defines en el ViewModel
+                        // Por ejemplo:
+                        // is RoutineEditViewModel.UiEvent.NavigateBack -> findNavController().popBackStack()
+                        else -> {
+                            // Esto es importante si UiEvent es sealed. Cubre cualquier tipo no manejado explícitamente.
+                            Timber.w("RoutineEditFragment: Received unhandled UiEvent: $event")
+                        }
                     }
                 }
             }
@@ -628,6 +635,7 @@ class RoutineEditFragment : BaseFragment(),
     }
 
     override fun onTimeTriggerConfigured(trigger: Trigger) {
+        Timber.d("RoutineEditFragment: onTimeTriggerConfigured received trigger: $trigger") // Log para depuración
         // Asigna el routineId correcto si la rutina ya existe (después del primer guardado)
         val currentRoutineId = viewModel.currentRoutine.value?.id ?: 0L // Obtiene el ID actual
         val triggerWithRoutineId = if (currentRoutineId > 0) {
@@ -654,6 +662,9 @@ class RoutineEditFragment : BaseFragment(),
                 // Opcional: mostrar un indicador de carga si la operación fuera asíncrona
             }
         }
+
+        viewModel.saveTrigger(trigger)
+        //dialog?.dismiss() // Si tu helper showDialog te permite obtener la instancia
     }
 
     // Métodos navigateToEditAction y openEditActionDialog se mantienen de la parte 2.

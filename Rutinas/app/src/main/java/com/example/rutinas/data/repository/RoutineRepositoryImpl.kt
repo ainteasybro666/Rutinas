@@ -1,5 +1,6 @@
 package com.example.rutinas.data.repository
 
+import com.example.rutinas.alarms.AlarmScheduler
 import com.example.rutinas.data.local.dao.ActionDao
 import com.example.rutinas.data.local.dao.RoutineDao
 import com.example.rutinas.data.local.dao.TriggerDao
@@ -19,7 +20,8 @@ import javax.inject.Singleton
 class RoutineRepositoryImpl @Inject constructor(
     private val routineDao: RoutineDao,
     private val actionDao: ActionDao,
-    private val triggerDao: TriggerDao
+    private val triggerDao: TriggerDao,
+    private val alarmScheduler: AlarmScheduler // <<-- NUEVO: Inyectar AlarmScheduler
     // Otros DAOs si los tienes
 ) : RoutineRepository {
 
@@ -35,125 +37,176 @@ class RoutineRepositoryImpl @Inject constructor(
         Timber.d("Repository: Updating routine status for ID: $routineId to $isEnabled")
         routineDao.updateEnabledStatus(routineId, isEnabled)
         Timber.d("Repository: Routine status updated for ID: $routineId")
+
+        // <<-- NUEVO: Después de actualizar el estado, recalendarizar la rutina -->>
+        // Necesitamos la rutina completa para recalendarizar. La cargamos por ID.
+        val routine = routineDao.getRoutineById(routineId)?.toRoutineDomain(
+            triggerDao.getTriggersForRoutine(routineId),
+            actionDao.getActionsForRoutine(routineId)
+        )
+        if (routine != null) {
+            if (routine.isEnabled) {
+                alarmScheduler.schedule(routine)
+                Timber.d("Repository: Scheduled routine with ID: $routineId after status update")
+            } else {
+                alarmScheduler.cancel(routine)
+                Timber.d("Repository: Canceled routine with ID: $routineId after status update")
+            }
+        } else {
+            Timber.e("Repository: Could not find routine with ID: $routineId after status update")
+        }
+        // <<-- FIN NUEVO -->>
     }
 
     override suspend fun insertRoutine(routine: Routine): Long {
         Timber.d("Repository: Inserting routine: ${routine.name}")
 
-        // Mapea el modelo de dominio Routine a RoutineEntity para insertar la entidad principal
-        val routineId = routineDao.insertRoutine(routine.toRoutineEntity())
+        val routineEntity = routine.toRoutineEntity()
+        val routineId = routineDao.insertRoutine(routineEntity)
         Timber.d("Repository: Routine inserted with ID: $routineId")
 
-        // Inserta los triggers asociados a la nueva rutina
-        // Asegúrate de asignar el routineId recién generado a los triggers antes de insertarlos
         val triggersToInsert = routine.triggers.map { it.copy(routineId = routineId) }
-        triggersToInsert.forEach { triggerDao.insertTrigger(it) } // Usa el método insertTrigger del DAO
+        triggersToInsert.forEach { triggerDao.insertTrigger(it) }
 
-        // Inserta las acciones asociadas a la nueva rutina
-        // Asegúrate de asignar el routineId recién generado a las acciones antes de insertarlas
         val actionsToInsert = routine.actions.map { it.copy(routineId = routineId) }
-        actionsToInsert.forEach { actionDao.insert(it) } // Usa el método insert del DAO
+        actionsToInsert.forEach { actionDao.insert(it) }
 
         Timber.d("Repository: Triggers and actions inserted for routine ID: $routineId")
-        return routineId // Devuelve el ID de la rutina insertada
+
+        // <<-- NUEVO: Después de insertar, programar las alarmas para esta rutina -->>
+        // Creamos un objeto Routine completo para pasárselo al scheduler
+        val insertedRoutine = routine.copy(id = routineId, triggers = triggersToInsert, actions = actionsToInsert)
+        if (insertedRoutine.isEnabled) { // Solo programar si la rutina está habilitada por defecto (o según el modelo)
+            alarmScheduler.schedule(insertedRoutine)
+            Timber.d("Repository: Scheduled routine with ID: $routineId after insertion")
+        } else {
+            Timber.d("Repository: Routine with ID: $routineId is disabled, skipping initial scheduling")
+        }
+
+        // <<-- FIN NUEVO -->>
+
+        return routineId
     }
 
     override suspend fun updateActions(actions: List<Action>) {
         Timber.d("Repository: Updating a list of actions (${actions.size}) individually")
-        // Itera sobre la lista y actualiza cada Action usando el mé-to-do update del DAO
         actions.forEach { action ->
             actionDao.update(action)
         }
         Timber.d("Repository: List of actions updated individually")
     }
 
-
     override suspend fun getRoutineByUuid(uuid: String): Routine? {
         Timber.d("Repository: Getting routine by UUID: $uuid")
-        // Obtiene la rutina por UUID, si existe
         val routineEntity = routineDao.getRoutineByUuid(uuid)
 
-        // Si se encontró la rutina, carga sus triggers y actions por routineId
         return routineEntity?.let { entity ->
             val triggers = triggerDao.getTriggersForRoutine(entity.id)
             val actions = actionDao.getActionsForRoutine(entity.id)
 
-            // Mapea RoutineEntity, triggers y actions a tu modelo de dominio Routine
             entity.toRoutineDomain(triggers, actions)
         } ?: run {
             Timber.d("Repository: Routine with UUID: $uuid not found")
-            null // Si la rutina no se encontró, devuelve null
+            null
         }
     }
 
     override suspend fun updateActionsOrder(actions: List<Action>) {
         Timber.d("Repository: Updating actions order for ${actions.size} actions")
-        // Itera sobre la lista y actualiza el orden de cada acción usando el DAO
         actions.forEach { action ->
             actionDao.updateActionOrder(action.uuid, action.executionOrder)
         }
         Timber.d("Repository: Actions order updated")
+
+        // <<-- OPCIONAL: Reprogramar si el orden de las acciones afecta triggers (poco probable para tiempo/calendario) -->>
+        // Para triggers de tiempo y calendario, el orden de las acciones no afecta cuándo se dispara el trigger,
+        // así que probablemente no necesites reprogramar aquí. Dejo el comentario por si acaso.
+        // Si tuvieras un trigger que dependiera de la finalización de acciones previas, SÍ deberías reprogramar.
     }
 
     override suspend fun updateAction(action: Action) {
         Timber.d("Repository: Updating action with UUID: ${action.uuid}")
-        actionDao.update(action) // Usa el método update del ActionDao para una sola acción
+        actionDao.update(action)
         Timber.d("Repository: Action updated with UUID: ${action.uuid}")
+
+        // <<-- OPCIONAL: Reprogramar si actualizar una acción afecta triggers (poco probable para tiempo/calendario) -->>
+        // Similar al caso anterior, actualizar una acción individual (ej: cambiar volumen) no debería afectar cuándo
+        // se dispara un trigger de tiempo o calendario.
     }
 
     override suspend fun deleteAction(action: Action) {
         Timber.d("Repository: Deleting action with UUID: ${action.uuid}")
-        actionDao.delete(action) // Usa el método delete del ActionDao para una sola acción
+        actionDao.delete(action)
         Timber.d("Repository: Action deleted with UUID: ${action.uuid}")
+
+        // <<-- OPCIONAL: Reprogramar si eliminar una acción afecta triggers -->>
+        // Igual que actualizar, poco probable que afecte triggers de tiempo/calendario.
     }
 
-    // Implementación de updateRoutine
     override suspend fun updateRoutine(routine: Routine) {
         Timber.d("Repository: Updating routine: ${routine.name} with ID: ${routine.id}")
 
-        // Actualiza la entidad Routine principal
+        // <<-- NUEVO: Antes de actualizar, cancelar las alarmas existentes para esta rutina -->>
+        // Esto es importante para evitar duplicados o alarmas obsoletas.
+        // Necesitamos la rutina *antes* de la actualización para cancelar correctamente.
+        val oldRoutine = getRoutineByUuid(routine.uuid) // Cargamos la versión anterior
+        if (oldRoutine != null) {
+            alarmScheduler.cancel(oldRoutine)
+            Timber.d("Repository: Canceled old alarms for routine with ID: ${routine.id} before update")
+        } else {
+            Timber.w("Repository: Could not find old routine with UUID: ${routine.uuid} to cancel alarms before update.")
+            // Considerar si emitir un error o manejarlo de otra forma si la rutina vieja no se encuentra.
+        }
+        // <<-- FIN NUEVO -->>
+
+
         routineDao.update(routine.toRoutineEntity())
         Timber.d("Repository: Main routine entity updated")
 
-        // --- Lógica de actualización de Triggers y Actions (Eliminar y Re-insertar) ---
-        // 1. Elimina todos los triggers y acciones existentes asociados a esta rutina
-        //    Usando los métodos delete...ForRoutine que añadimos a los DAOs.
         triggerDao.deleteTriggersForRoutine(routine.id)
         actionDao.deleteActionsForRoutine(routine.id)
         Timber.d("Repository: Deleted old triggers and actions for routine ID: ${routine.id}")
 
-
-        // 2. Inserta los triggers y acciones actualizados desde el modelo de dominio Routine
-        //    Asegúrate de que tienen el routineId correcto (ya lo tienen en el modelo Routine)
         routine.triggers.forEach { triggerDao.insertTrigger(it) }
         routine.actions.forEach { actionDao.insert(it) }
         Timber.d("Repository: Inserted updated triggers and actions for routine ID: ${routine.id}")
 
         Timber.d("Repository: Routine, triggers, and actions updated for ID: ${routine.id}")
+
+        // <<-- NUEVO: Después de actualizar, programar las nuevas alarmas para esta rutina -->>
+        // Usamos el objeto 'routine' que ya tiene los triggers y actions actualizados.
+        if (routine.isEnabled) { // Solo programar si la rutina está habilitada
+            alarmScheduler.schedule(routine)
+            Timber.d("Repository: Scheduled routine with ID: ${routine.id} after update")
+        } else {
+            Timber.d("Repository: Routine with ID: ${routine.id} is disabled after update, skipping scheduling")
+        }
+        // <<-- FIN NUEVO -->>
     }
 
     // NEW: Implement the deleteRoutine function
     override suspend fun deleteRoutine(routine: Routine) {
         Timber.d("Repository: Deleting routine with ID: ${routine.id} and UUID: ${routine.uuid}")
 
-        // 1. Delete associated triggers
+        // <<-- NUEVO: Antes de eliminar, cancelar las alarmas existentes para esta rutina -->>
+        alarmScheduler.cancel(routine)
+        Timber.d("Repository: Canceled alarms for routine with ID: ${routine.id} before deletion")
+        // <<-- FIN NUEVO -->>
+
         Timber.d("Repository: Deleting triggers for routine ID: ${routine.id}")
-        triggerDao.deleteTriggersForRoutine(routine.id) // Assuming you have this DAO method
+        triggerDao.deleteTriggersForRoutine(routine.id)
 
-        // 2. Delete associated actions
         Timber.d("Repository: Deleting actions for routine ID: ${routine.id}")
-        actionDao.deleteActionsForRoutine(routine.id) // Assuming you have this DAO method
+        actionDao.deleteActionsForRoutine(routine.id)
 
-        // 3. Delete the routine itself
         Timber.d("Repository: Deleting the routine entity for ID: ${routine.id}")
-        routineDao.deleteRoutine(routine.toRoutineEntity()) // Assuming you have a delete method in RoutineDao
+        routineDao.deleteRoutine(routine.toRoutineEntity())
 
         Timber.d("Repository: Routine and associated data deleted successfully for ID: ${routine.id}")
     }
 
 
-    // Implementa otras funciones de la interfaz RoutineRepository si hay más.
-
+    // Implementa otras funciones de la interfaz RoutineRepository si hay más.\n\n
 }
 
 // --- Funciones de Mapeo ---

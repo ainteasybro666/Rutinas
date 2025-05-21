@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import timber.log.Timber.Forest.e
 import java.time.LocalDateTime
+import java.util.Collections.frequency
 import java.util.UUID // Import UUID
 import javax.inject.Inject
 
@@ -158,91 +159,141 @@ class RoutineEditViewModel @Inject constructor(
             Timber.d("ViewModel: Validando triggers antes de guardar: ${_triggers.value.size} triggers") // Log validation start
 
             // Validaciones de triggers (usando el StateFlow del ViewModel)
-            for (trigger in _triggers.value) { // Usa la lista de triggers del StateFlow
+            for (trigger in _triggers.value) {
                 if (trigger.triggerType == "TIME") {
                     // Obtener los datos de forma segura
                     val frequency = trigger.data.data["frequency"] as? String
                     val daysOfWeek = trigger.data.data["daysOfWeek"] as? List<Int>
                     val dayOfMonth = trigger.data.data["dayOfMonth"] as? Int
 
-                    if (frequency == "weekly" && (daysOfWeek == null || daysOfWeek.isEmpty())) {
-                        _saveResult.emit(Resource.Error("Debes seleccionar al menos un día de la semana para un trigger semanal."))
-                        return@launch
+                    // ** VALIDACIÓN PARA TRIGGER SEMANAL - DEBE ESTAR AQUÍ DENTRO DEL BLOQUE TIME **
+                    if (frequency == "weekly") {
+                        Timber.d("Validando trigger semanal.")
+                        if (daysOfWeek.isNullOrEmpty()) {
+                            Timber.d("Validación: Trigger semanal sin días de la semana.")
+                            viewModelScope.launch { // <-- Este launch está dentro del launch principal
+                                _uiEvent.emit(UiEvent.ShowMessage("Debes seleccionar al menos un día de la semana para un trigger semanal.")) // Usa UiEvent
+                            }
+                            _saveResult.emit(Resource.Error("Debes seleccionar al menos un día de la semana para un trigger semanal."))
+                            return@launch // <-- return@launch sale del launch principal
+                        }
+                        Timber.d("Validación: Trigger semanal OK.")
                     }
 
-                    if (frequency == "monthly" && (dayOfMonth == null || dayOfMonth !in 1..31)) {
-                        _saveResult.emit(Resource.Error("El día del mes debe estar entre 1 y 31 para un trigger mensual."))
-                        return@launch
+                    // ** VALIDACIÓN PARA TRIGGER MENSUAL - DEBE ESTAR AQUÍ DENTRO DEL BLOQUE TIME **
+                    if (frequency == "monthly") {
+                        Timber.d("Validando trigger mensual.")
+                        if (dayOfMonth == null || dayOfMonth !in 1..31) {
+                            Timber.d("Validación: Trigger mensual con día del mes inválido.")
+                            viewModelScope.launch { // <-- Este launch está dentro del launch principal
+                                _uiEvent.emit(UiEvent.ShowMessage("El día del mes debe estar entre 1 y 31 para un trigger mensual.")) // Usa UiEvent
+                            }
+                            _saveResult.emit(Resource.Error("El día del mes debe estar entre 1 y 31 para un trigger mensual."))
+                            return@launch // <-- return@launch sale del launch principal
+                        }
+                        Timber.d("Validación: Trigger mensual OK.")
                     }
+
+                    // Puedes añadir validaciones para otros tipos de frecuencia si existen (ej. "daily", "once")
+                    // ** VALIDACIÓN PARA FRECUENCIA NO VÁLIDA - DEBE ESTAR AQUÍ DENTRO DEL BLOQUE TIME **
+                    if (frequency == null || (frequency != "weekly" && frequency != "monthly" /* && otros tipos */)) {
+                        Timber.d("Validación: Frecuencia de trigger de tiempo no válida.")
+                        viewModelScope.launch { // <-- Este launch está dentro del launch principal
+                            _uiEvent.emit(UiEvent.ShowMessage("Frecuencia del trigger de tiempo no válida.")) // Usa UiEvent
+                        }
+                        _saveResult.emit(Resource.Error("Frecuencia del trigger de tiempo no válida."))
+                        return@launch // <-- return@launch sale del launch principal
+                    }
+                    Timber.d("Validación: Frecuencia de trigger de tiempo OK.")
+
+                } // <-- Fin del bloque if (trigger.triggerType == "TIME")
+
+                // ** VALIDACIONES PARA OTROS TIPOS DE TRIGGERS - DEBEN ESTAR AQUÍ DENTRO DEL BUCLE FOR **
+                if (trigger.triggerType == "CALENDAR") {
+                    Timber.d("Validando trigger de calendario. Data: ${trigger.data.data}")
+                    val calendarTime = trigger.data.data["calendarTime"] as? LocalDateTime
+                    if (calendarTime == null) {
+                        Timber.d("Validación: Trigger de calendario sin fecha/hora.")
+                        viewModelScope.launch { // <-- Este launch está dentro del launch principal
+                            _uiEvent.emit(UiEvent.ShowMessage("La fecha y hora del trigger de calendario no pueden estar vacías.")) // Usa UiEvent
+                        }
+                        _saveResult.emit(Resource.Error("La fecha y hora del trigger de calendario no pueden estar vacías."))
+                        return@launch // <-- return@launch sale del launch principal
+                    }
+                    Timber.d("Validación: Trigger de calendario OK.")
                 }
+                    // Podrías validar que calendarTime.isAfter(LocalDateTime.now()) si tiene sentido
+
                 // Puedes añadir más validaciones para otros tipos de triggers aquí
+//            }
+//            if (trigger.triggerType == "LOCATION") {
+//                Timber.d("Validando trigger de ubicación. Data: ${trigger.data.data}")
+//                val latitude = trigger.data.data["latitude"] as? Double
+//                val longitude = trigger.data.data["longitude"] as? Double
+//                val radius = trigger.data.data["radius"] as? Double
+//                val locationName = trigger.data.data["locationName"] as? String
+//                val enterExit = trigger.data.data["enterExit"] as? String
+//
+//                if (latitude == null || longitude == null || radius == null || locationName.isNullOrEmpty() || enterExit.isNullOrEmpty()) {
+//                    Timber.d("Validación: Trigger de ubicación incompleto.")
+//                    viewModelScope.launch { // <-- Este launch está dentro del launch principal
+//                        _uiEvent.emit(UiEvent.ShowMessage("La configuración del trigger de ubicación está incompleta.")) // Usa UiEvent
+//                    }
+//                    _saveResult.emit(Resource.Error("La configuración del trigger de ubicación está incompleta."))
+//                    return@launch // <-- return@launch sale del launch principal
+//                }
+//                if (enterExit != "enter" && enterExit != "exit") {
+//                    Timber.d("Validación: Trigger de ubicación con tipo de evento inválido.")
+//                    viewModelScope.launch { // <-- Este launch está dentro del launch principal
+//                        _uiEvent.emit(UiEvent.ShowMessage("El tipo de evento (entrada/salida) del trigger de ubicación no es válido.")) // Usa UiEvent
+//                    }
+//                    _saveResult.emit(Resource.Error("El tipo de evento (entrada/salida) del trigger de ubicación no es válido."))
+//                    return@launch // <-- return@launch sale del launch principal
+//                }
+//                Timber.d("Validación: Trigger de ubicación OK.")
+//            }
             }
 
+            // ** COMIENZO DEL BLOQUE TRY PARA GUARDAR LA RUTINA Y SUS TRIGGERS/ACTIONS **
             try {
+                Timber.d("ViewModel: Pasó validaciones de triggers. Procediendo a guardar en BD.")
                 // Crear una nueva Routine con los datos actualizados
                 val routineToSave = currentRoutine.copy(
                     name = name,
-                    // triggers y actions ya están en los StateFlows del ViewModel
-                    triggers = _triggers.value.toList(), // Usa la lista de triggers del StateFlow (ya es inmutable, pero toList crea una nueva instancia)
-                    actions = _actions.value.toList() // Usa actions del ViewModel (ya es inmutable, pero toList crea una nueva instancia)
+                    triggers = _triggers.value.toList(),
+                    actions = _actions.value.toList()
                 )
 
                 val resultId = if (isNewRoutine) {
-                    val insertedId = repository.insertRoutine(routineToSave) // Asume que insertRoutine devuelve el ID (Long)
+                    val insertedId = repository.insertRoutine(routineToSave)
                     Timber.d("ViewModel: Rutina insertada con ID: $insertedId")
                     insertedId
                 } else {
-                    Timber.d("ViewModel: Actualizando rutina existente con ID: ${routineToSave.id}") // Log update
-                    repository.updateRoutine(routineToSave) // Asume que updateRoutine actualiza
-                    routineToSave.id // Si es update, usa el ID existente
+                    Timber.d("ViewModel: Actualizando rutina existente con ID: ${routineToSave.id}")
+                    repository.updateRoutine(routineToSave)
+                    routineToSave.id
                 }
 
-                // Emite un resultado de éxito con el ID guardado/actualizado
-                _saveResult.emit(Resource.Success(resultId)) // Ajusta según lo que devuelva insert/update
+                _saveResult.emit(Resource.Success(resultId))
 
-                // Actualiza el StateFlow _currentRoutine con el ID si era una nueva rutina
-                // Esto es importante para que las acciones/triggers añadidos después de guardar tengan el routineId correcto
                 if (isNewRoutine) {
                     Timber.d("Updating _currentRoutine with new ID: $resultId")
-                    // Asegurar que creamos una nueva instancia de Routine con el ID correcto y manteniendo el UUID
                     _currentRoutine.value = routineToSave.copy(id = resultId, uuid = routineToSave.uuid)
-
-                    // Also update the routineId for triggers and actions in the ViewModel's StateFlows
-                    // This is crucial for adding new triggers/actions after the initial save
-                    _triggers.update { currentList ->
-                        currentList.map { it.copy(routineId = resultId) }.toList() // Usar toList() para emitir nueva instancia
-                    }
-                    _actions.update { currentList ->
-                        currentList.map { it.copy(routineId = resultId) }.toList() // Usar toList() para emitir nueva instancia
-                    }
-
-                    isNewRoutine = false // Ya no es una rutina nueva después de guardar
+                    _triggers.update { currentList -> currentList.map { it.copy(routineId = resultId) }.toList() }
+                    _actions.update { currentList -> currentList.map { it.copy(routineId = resultId) }.toList() }
+                    isNewRoutine = false
                 }
 
                 Timber.d("Rutina guardada con éxito, ID: $resultId")
 
-            } catch (e: Exception) {
-                Timber.e("Error inesperado al guardar rutina: ${e.message}", e) // Loguear la excepción
+            } catch (e: Exception) { // <-- Bloque catch del try
+                Timber.e("Error inesperado al guardar rutina: ${e.message}", e)
+                viewModelScope.launch { // <-- Este launch está dentro del launch principal
+                    _uiEvent.emit(UiEvent.ShowMessage(e.localizedMessage ?: "Error desconocido al guardar rutina")) // Usa UiEvent
+                }
                 _saveResult.emit(Resource.Error(e.localizedMessage ?: "Error desconocido"))
             }
         }
-
-        // Ejemplo de cómo usarlo en el ViewModel (dentro de saveRoutine, por ejemplo):
-        // En lugar de emitir Resource.Error directamente al _saveResult si es un error de validación del trigger:
-        // _saveResult.emit(Resource.Error("Debes seleccionar al menos un día de la semana..."))
-        // Podrías emitir un evento de UI para mostrar el Toast:
-        viewModelScope.launch {
-            _uiEvent.emit(UiEvent.ShowMessage("Debes seleccionar al menos un día de la semana para un trigger semanal."))
-            // Y luego podrías simplemente retornar o emitir un Resource.Error al saveResult si quieres que el Fragment también sepa que el guardado falló por validación.
-        }
-
-        // O para un error en el try-catch:
-        // _saveResult.emit(Resource.Error(e.localizedMessage ?: "Error desconocido"))
-        // Cambiar a:
-//        viewModelScope.launch {
-//            _uiEvent.emit(UiEvent.ShowMessage(e.localizedMessage ?: "Error desconocido"))
-//            // Opcional: _saveResult.emit(Resource.Error(...)) si quieres un manejo dual
-//        }
     }
 
     // Modificado para usar listas inmutables, generar UUID y devolver el trigger añadido
@@ -271,6 +322,48 @@ class RoutineEditViewModel @Inject constructor(
         }
         Timber.d("Trigger añadido a la lista del ViewModel: ${triggerToAdd.uuid}. Lista total size: ${_triggers.value.size}")
         return Resource.Success(triggerToAdd) // Return a success resource with the added trigger
+    }
+
+    fun saveTrigger(trigger: Trigger) {
+        Timber.d("ViewModel: saveTrigger called with trigger: ${trigger.uuid}")
+
+        // Verificar si el trigger con este UUID ya existe en la lista actual
+        val existingTriggerIndex = _triggers.value.indexOfFirst { it.uuid == trigger.uuid }
+
+        if (existingTriggerIndex != -1) {
+            // El trigger YA existe, es una ACTUALIZACIÓN
+            Timber.d("ViewModel: Trigger with UUID ${trigger.uuid} found. Updating...")
+            updateTrigger(trigger) // Llama al método updateTrigger existente
+            //updateTrigger ya maneja la emisión al StateFlow
+        } else {
+            // El trigger NO existe (o tiene UUID vacío/0), es uno NUEVO
+            Timber.d("ViewModel: Trigger with UUID ${trigger.uuid} not found. Adding...")
+
+            // Tu addTrigger actual tiene la lógica de validar duplicados por TIPO.
+            // Y asigna un UUID si está vacío.
+            // Así que podemos seguir usando addTrigger para la lógica de "añadir uno nuevo".
+            // addTrigger devuelve un Resource<Trigger> para indicar si fue exitoso o si hubo duplicado.
+
+            val addResult = addTrigger(trigger) // Llama al método addTrigger existente
+
+            when(addResult) {
+                is Resource.Success -> {
+                    Timber.d("ViewModel: Trigger added successfully with UUID: ${addResult.data.uuid}")
+                    // addTrigger ya emite la lista actualizada al StateFlow
+                }
+                is Resource.Error -> {
+                    Timber.e("ViewModel: Failed to add trigger: ${addResult.message}")
+                    // Opcional: Emitir un evento de UI para mostrar el error al usuario
+                    viewModelScope.launch {
+                        _uiEvent.emit(RoutineEditViewModel.UiEvent.ShowMessage(addResult.message ?: "Error desconocido al añadir trigger"))
+                        // Asegúrate de que tienes el uiEvent flow en tu ViewModel (Opción 1)
+                        // _uiEvent.emit(UiEvent.ShowMessage(addResult.message ?: "Error desconocido al añadir trigger"))
+                        // Si no tienes uiEvent, maneja el error de otra manera (ej. log)
+                    }
+                }
+                else -> { /* Resource.Loading - no relevante para la respuesta sincrónica de addTrigger */ }
+            }
+        }
     }
 
     // Modificado para usar listas inmutables y crear una nueva lista
