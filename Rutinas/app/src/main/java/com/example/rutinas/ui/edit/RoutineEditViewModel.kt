@@ -2,6 +2,7 @@ package com.example.rutinas.ui.edit
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.rutinas.alarms.AlarmScheduler
 import com.example.rutinas.data.model.Action
 import com.example.rutinas.data.model.Trigger
 import com.example.rutinas.data.repository.RoutineRepository
@@ -26,7 +27,8 @@ import javax.inject.Inject
 
 @HiltViewModel // Anotación si usas Hilt
 class RoutineEditViewModel @Inject constructor(
-    private val repository: RoutineRepository
+    private val repository: RoutineRepository,
+    private val alarmScheduler: AlarmScheduler
 ) : ViewModel() {
 
     private val _currentRoutine = MutableStateFlow<Routine?>(null)
@@ -274,6 +276,23 @@ class RoutineEditViewModel @Inject constructor(
                     routineToSave.id
                 }
 
+                // <<-- NUEVO: Programar/Actualizar alarmas después de guardar con éxito -->>
+                // Necesitas obtener la rutina COMPLETA guardada para pasársela al AlarmScheduler,
+                // ya que podría haber cambios en los triggers o acciones que afectan la programación.
+                val savedRoutine = repository.getRoutineById(resultId) // Asegúrate de tener este método en tu repositorio
+
+                if (savedRoutine != null) {
+                    Timber.d("ViewModel: Rutina guardada obtenida de nuevo para programar alarmas.")
+                    // Llama a la función en tu AlarmScheduler para programar o reprogramar las alarmas.
+                    // Tu AlarmScheduler probablemente necesitará recibir la rutina completa.
+                    alarmScheduler.scheduleRoutineAlarms(savedRoutine) // <--- Llama a tu función de programación
+                    Timber.d("ViewModel: alarmScheduler.scheduleRoutineAlarms() llamado.")
+                } else {
+                    Timber.e("ViewModel: No se pudo obtener la rutina guardada para programar alarmas. ID: $resultId")
+                    // Considerar emitir un error o advertencia al usuario
+                }
+                // <<-- FIN NUEVO -->>
+
                 _saveResult.emit(Resource.Success(resultId))
 
                 if (isNewRoutine) {
@@ -315,7 +334,7 @@ class RoutineEditViewModel @Inject constructor(
                  trigger
              }
 
-        
+
         // Crear una nueva lista con el trigger añadido y emitir
         _triggers.update { currentTriggers ->
             currentTriggers + triggerToAdd
@@ -390,4 +409,6 @@ class RoutineEditViewModel @Inject constructor(
         }
         Timber.d("updateTrigger: Trigger with UUID ${updatedTrigger.uuid} updated. New list size: ${_triggers.value.size}")
     }
+
+
 }

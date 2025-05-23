@@ -1,6 +1,7 @@
 package com.example.rutinas.data.repository
 
 import com.example.rutinas.data.model.Action
+import com.example.rutinas.data.model.Trigger
 import com.example.rutinas.domain.Routine
 import com.example.rutinas.utils.Resource
 import kotlinx.coroutines.flow.Flow
@@ -16,4 +17,6 @@ interface RoutineRepository {
     suspend fun deleteAction(action: Action)
     suspend fun updateRoutine(routine: Routine)
     suspend fun deleteRoutine(routine: Routine)
+    suspend fun getRoutineById(id: Long): Routine?
+    suspend fun getTriggersForRoutine(routineId: Long): List<Trigger>
 }

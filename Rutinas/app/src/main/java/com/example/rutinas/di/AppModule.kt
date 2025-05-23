@@ -2,6 +2,7 @@ package com.example.rutinas.di
 
 import android.content.Context
 import androidx.room.Room
+import com.example.rutinas.alarms.AlarmScheduler
 import com.example.rutinas.data.local.AppDatabase
 import com.example.rutinas.data.repository.RoutineRepository
 import com.example.rutinas.data.repository.RoutineRepositoryImpl
@@ -64,5 +65,15 @@ object AppModule {
     @Provides
     fun provideTriggerDao(db: AppDatabase): TriggerDao {
         return db.triggerDao()
+    }
+
+    @Provides
+    @Singleton // O el scope que sea apropiado para AlarmScheduler (Singleton suele ser adecuado)
+    fun provideAlarmScheduler(
+        @ApplicationContext context: Context,
+        routineRepository: RoutineRepository // Hilt inyectará automáticamente la instancia de RoutineRepository
+    ): AlarmScheduler {
+        // Hilt llamará a este constructor con las dependencias provistas
+        return AlarmScheduler(context, routineRepository)
     }
 }
