@@ -167,20 +167,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <Button
-            android:id="@+id/btn_cancel_alarm_action"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:text="Cancelar"
-            style="@style/Widget.MaterialComponents.Button.TextButton"/>
-
-        <Button
-            android:id="@+id/btn_save_alarm_action"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Guardar"/>
-
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

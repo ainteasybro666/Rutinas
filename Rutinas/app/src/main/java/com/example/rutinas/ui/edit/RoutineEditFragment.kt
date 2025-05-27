@@ -57,6 +57,7 @@ import androidx.navigation.fragment.findNavController
 // Importar navArgs
 import androidx.navigation.fragment.navArgs
 import com.example.rutinas.alarms.AlarmScheduler
+import com.example.rutinas.data.model.FrequencyType
 import com.example.rutinas.ui.edit.dialogs.TriggerTypeDialog.TriggerType
 
 @AndroidEntryPoint
@@ -281,24 +282,26 @@ class RoutineEditFragment : BaseFragment(),
                     }
                 }
 
-                // Observe triggers from ViewModel
                 launch {
                     viewModel.triggers.collect { triggers ->
-                        Timber.d("RoutineEditFragment: Trigger list updated in observer: ${triggers.size} items")
-                        triggerAdapter.submitList(triggers.toList())
-                        Timber.d("RoutineEditFragment: Submitted ${triggers.size} triggers to adapter")
+                        Timber.d("RoutineEditFragment: Recibida actualización de triggers (${triggers.size} triggers).")
+
+                        // Esto mantiene la lista de triggers visible en la UI (la lista de triggers añadidos)
+                        triggerAdapter.submitList(triggers.toList()) // Usar toList() es buena práctica para crear una copia inmutable para el adapter
+                        Timber.d("RoutineEditFragment: submitList called on TriggerAdapter.") // Log después de llamar a submitList
                     }
                 }
 
                 // Observe actions from ViewModel
+                // ... (este bloque parece estar bien para manejar acciones y no requiere cambios relacionados con triggers) ...
                 launch {
                     viewModel.actions.collect { actions ->
                         Timber.d("RoutineEditFragment: Action list updated in observer: ${actions.size} items")
                         // Log para verificar qué acciones se reciben
                         Timber.d("RoutineEditFragment: Actions received: ${actions.map { it.uuid to it.actionType }}")
 
-                            val currentListBeforeUpdate =
-                        actionAdapter.currentList.toList() // Copia la lista actual del adapter
+                        val currentListBeforeUpdate =
+                            actionAdapter.currentList.toList() // Copia la lista actual del adapter
                         actionAdapter.submitList(actions.toList()) { // Usa la sobrecarga con Runnable de completado
                             Timber.d("RoutineEditFragment: ActionAdapter submitList completed.")
 
@@ -309,14 +312,14 @@ class RoutineEditFragment : BaseFragment(),
                                 Timber.d("RoutineEditFragment: Checking for pending action to configure: UUID ${pendingAction.uuid}")
                                 // Buscar la acción pendiente en la lista ACTUALIZADA del ViewModel
                                 val configuredAction =
-                                actions.find { it.uuid == pendingAction.uuid }
+                                    actions.find { it.uuid == pendingAction.uuid }
 
                                 if (configuredAction != null) {
                                     Timber.d("RoutineEditFragment: Found pending action with UUID ${pendingAction.uuid} in updated list.")
-                                            // Abrir el diálogo de configuración para esta acción
-                                            openEditActionDialog(configuredAction)
-                                            // Limpiar la variable después de abrir el diálogo
-                                            actionToConfigure = null
+                                    // Abrir el diálogo de configuración para esta acción
+                                    openEditActionDialog(configuredAction)
+                                    // Limpiar la variable después de abrir el diálogo
+                                    actionToConfigure = null
                                     Timber.d("RoutineEditFragment: Config dialog opened, actionToConfigure cleared.")
                                 } else {
                                     Timber.d("RoutineEditFragment: Pending action with UUID ${pendingAction.uuid} not found in updated list yet.")
@@ -331,6 +334,7 @@ class RoutineEditFragment : BaseFragment(),
                         Timber.d("RoutineEditFragment: Finished processing actions collect block.")
                     }
                 }
+
 
                 // Observe saveResult from ViewModel
                 launch {
@@ -375,7 +379,6 @@ class RoutineEditFragment : BaseFragment(),
         }
         Timber.d("RoutineEditFragment: ViewModel Observers setup complete.")
     }
-
 
     // Modified onActionSelected to set actionToConfigure
     override fun onActionSelected(actionType: ActionType) {
@@ -426,7 +429,7 @@ class RoutineEditFragment : BaseFragment(),
 
             // <<-- NUEVO: Verificar si la rutina tiene triggers de tiempo o calendario y solicitar permiso si es necesario -->>
             val hasAlarmTriggers = viewModel.triggers.value.any {
-                it.triggerType == "TIME" || it.triggerType == "CALENDAR"
+                it.triggerType == TriggerTypeDialog.TriggerType.TIME || it.triggerType == TriggerTypeDialog.TriggerType.CALENDAR
             }
 
             if (hasAlarmTriggers && !alarmScheduler.canScheduleExactAlarms()) {

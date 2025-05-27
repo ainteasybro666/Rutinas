@@ -123,17 +123,6 @@ class EditAlarmActionDialogFragment(listener: ActionDialogListener) : BaseEditAc
                 }
             }
 
-
-            // Add listeners for Save and Cancel buttons
-            btnSaveAlarmAction.setOnClickListener {
-                Timber.d("EditAlarmActionDialogFragment: Save button clicked.")
-//                onSaveAction()
-            }
-
-            btnCancelAlarmAction.setOnClickListener {
-                Timber.d("EditAlarmActionDialogFragment: Cancel button clicked.")
-                dismiss()
-            }
         }
     }
 

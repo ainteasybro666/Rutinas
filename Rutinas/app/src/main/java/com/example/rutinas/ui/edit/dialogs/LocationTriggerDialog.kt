@@ -39,7 +39,7 @@ class LocationTriggerDialog : DialogFragment() {
 
         val trigger = Trigger(
             routineId = routineId,
-            triggerType = "LOCATION",
+            triggerType = TriggerTypeDialog.TriggerType.LOCATION,
             data = DataWrapper(
                 mapOf(
                     "latitude" to latitude,

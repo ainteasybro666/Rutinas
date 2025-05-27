@@ -27,6 +27,7 @@ import com.example.rutinas.domain.Routine
 import com.example.rutinas.execution.RoutineExecutor
 import com.example.rutinas.data.repository.RoutineRepository // Replace with your actual repository
 import com.example.rutinas.receivers.AlarmReceiver
+import com.example.rutinas.ui.edit.dialogs.TriggerTypeDialog
 import kotlinx.coroutines.* // Import coroutine stuff
 
 
@@ -169,21 +170,22 @@ class RoutineExecutionService : Service(), RoutineExecutionListener {
             null -> { // Si no hay acción, asumimos que es una alarma disparada por el Receiver
                 val routineUuid = intent?.getStringExtra(AlarmReceiver.EXTRA_ROUTINE_UUID)
                 val alarmId = intent?.getIntExtra(AlarmReceiver.EXTRA_ALARM_ID, -1)
+                val triggerUuid = intent?.getStringExtra(AlarmReceiver.EXTRA_TRIGGER_UUID) // Asegúrate de obtener este extra
 
-                if (routineUuid != null && alarmId != -1) {
-                    alarmId?.let { id -> // Si alarmId no es nulo, ejecuta este bloque con 'id' como Int
-                        Timber.d("RoutineExecutionService: Received alarm intent from Receiver. UUID: $routineUuid, Alarm ID: $id")
+                if (routineUuid != null && triggerUuid != null && alarmId != -1) { // Asegúrate de que triggerUuid TAMBIEN sea no nulo
+                    alarmId?.let { id ->
+                        Timber.d("RoutineExecutionService: Received alarm intent from Receiver. UUID: $routineUuid, Trigger UUID: $triggerUuid, Alarm ID: $id") // Añade logging para triggerUuid
                         updateForegroundNotification("Cargando Rutina...")
                         // Ejecutar la lógica principal de la alarma
-                        handleAlarmTriggered(routineUuid, id) // 'id' es un Int no nulo
+                        handleAlarmTriggered(routineUuid, triggerUuid, id) // <<-- PASA triggerUuid AQUI
                     } ?: run {
-                        // Este bloque se ejecuta si alarmId es nulo (aunque con -1 por defecto es poco probable)
                         Timber.e("AlarmReceiver.EXTRA_ALARM_ID was unexpectedly null")
-                        stopSelf() // O alguna otra acción de error
+                        stopSelf()
                     }
                 } else {
-                    Timber.e("RoutineExecutionService: Required extras missing from alarm intent. UUID: $routineUuid, Alarm ID: $alarmId. Stopping service.")
+                    Timber.e("RoutineExecutionService: Required extras missing from alarm intent. UUID: $routineUuid, Trigger UUID: $triggerUuid, Alarm ID: $alarmId. Stopping service.") // Añade logging para triggerUuid
                     stopSelf()
+                    return START_NOT_STICKY
                 }
             }
             ACTION_STOP_CURRENT_ALARM -> {
@@ -209,7 +211,7 @@ class RoutineExecutionService : Service(), RoutineExecutionListener {
     }
 
     // <<-- NUEVA FUNCIÓN PARA MANEJAR LA LÓGICA DEL RECEIVER -->>
-    private fun handleAlarmTriggered(routineUuid: String, alarmId: Int) {
+    private fun handleAlarmTriggered(routineUuid: String, triggerUuid: String, alarmId: Int) {
         Timber.i("RoutineExecutionService: Handling triggered alarm for UUID: $routineUuid, Alarm ID: $alarmId")
         serviceScope.launch {
             val routine = try {
@@ -233,21 +235,28 @@ class RoutineExecutionService : Service(), RoutineExecutionListener {
                     }
 
                     firedTrigger?.let { trigger ->
-                        if (trigger.triggerType == "TIME") {
-                            val frequency = trigger.data?.data?.get("frequency") as? String
-                            if (frequency == "daily" || frequency == "weekly" || frequency == "monthly") {
-                                Timber.d("Reprogramming recurring trigger: ${trigger.uuid}")
-                                // Cancel the specific trigger before rescheduling
-                                // Llama a una función pública en AlarmScheduler para cancelar una alarma específica
+                        if (trigger.triggerType == TriggerTypeDialog.TriggerType.TIME) { // Verifica que sea un trigger de tiempo
+                            val frequency = trigger.data.data?.get("frequency") as? String
+                            // Reprogramar solo si la frecuencia NO es "once"
+                            if (frequency != "once") {
+                                Timber.d("Reprogramming recurring TIME trigger: ${trigger.uuid}")
+                                // Cancel the specific trigger before rescheduling (esto ya lo tienes)
                                 alarmScheduler.cancelSingleAlarm(routine.uuid, trigger.uuid)
-                                // Schedule the next occurrence of this specific trigger
-                                alarmScheduler.scheduleTimeTrigger(routine, trigger) // Asegúrate de que scheduleTimeTrigger esté disponible públicamente en AlarmScheduler
+                                // Schedule the next occurrence of this specific trigger (esto ya lo tienes)
+                                alarmScheduler.scheduleTimeTrigger(routine, trigger) // O la función que uses para programar
                             } else {
-                                Timber.d("Time trigger is not recurring or frequency not specified. Not reprogramming.")
+                                Timber.d("TIME trigger is 'once'. Not reprogramming.")
+                                // Para triggers "once", no hacemos nada aquí. Ya se cancelaron implícitamente
+                                // porque AlarmManager por defecto no repite una PendingIntent programada con setExact o setAlarmClock
+                                // Si usas setRepeating, NECESITARÍAS cancelar explícitamente aquí
+                                // Assuming you are using setExact or setAlarmClock based on previous code
                             }
-                        } else {
-                            Timber.d("Trigger is not a time trigger. Not reprogramming automatically.")
+                        } else if (trigger.triggerType == TriggerTypeDialog.TriggerType.CALENDAR) {
+                            Timber.d("CALENDAR trigger fired. Not reprogramming as it's a one-time event.")
+                            // Los triggers CALENDAR también son de una sola vez (según nuestra suposición actual)
+                            // No reprogramar aquí. La cancelación ocurrirá si usas setExact/setAlarmClock
                         }
+                        // Triggers LOCATION y otros tipos no se manejan aquí para reprogramación de AlarmManager
                     }
                     // <<-- FIN LÓGICA DE REPROGRAMACIÓN -->>
 
@@ -265,7 +274,7 @@ class RoutineExecutionService : Service(), RoutineExecutionListener {
                 Timber.w("RoutineExecutionService: Routine not found for uuid=$routineUuid")
                 // Attempt to cancel the specific alarm even if the routine is not found
                 // Llama a una función pública para cancelar una alarma específica por UUID y Alarm ID
-                alarmScheduler.cancelSingleAlarmByInfo(routineUuid, alarmId) // Necesitas implementar esta función en AlarmScheduler
+                alarmScheduler.cancelSingleAlarmByInfo(routineUuid, triggerUuid, alarmId)
 
                 withContext(Dispatchers.Main) {
                     Toast.makeText(applicationContext, "Rutina desconocida (UUID: $routineUuid) disparada", Toast.LENGTH_SHORT).show()

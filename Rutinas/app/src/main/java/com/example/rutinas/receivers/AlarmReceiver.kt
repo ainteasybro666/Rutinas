@@ -62,6 +62,7 @@ class AlarmReceiver : BroadcastReceiver() {
     companion object {
         const val EXTRA_ALARM_ID = "com.example.rutinas.extra.ALARM_ID"
         const val EXTRA_ROUTINE_UUID = "com.example.rutinas.extra.ROUTINE_UUID"
+        const val EXTRA_TRIGGER_UUID = "extra_trigger_uuid"
         // Añade aquí otras acciones de Intent que tu Receiver pueda manejar (ej: STOP_ALARM)
         // const val ACTION_STOP_ALARM = "com.example.rutinas.action.STOP_ALARM"
     }

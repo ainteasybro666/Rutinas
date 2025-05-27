@@ -7,10 +7,12 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import com.example.rutinas.data.model.FrequencyType
 import com.example.rutinas.data.model.Trigger
 import com.example.rutinas.domain.Routine
 import com.example.rutinas.data.repository.RoutineRepository
 import com.example.rutinas.receivers.AlarmReceiver
+import com.example.rutinas.ui.edit.dialogs.TriggerTypeDialog
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.filter
 import timber.log.Timber
@@ -20,6 +22,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.temporal.TemporalAdjusters
 import java.util.Date
 import kotlin.math.absoluteValue
@@ -34,25 +37,274 @@ class AlarmScheduler @Inject constructor(
         context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
     }
 
-    suspend fun schedule(routine: Routine) {
-        Timber.d("Programando alarmas para la rutina: ${routine.uuid}, ${routine.name}")
+    // Esta función programa todas las alarmas para una rutina dada
+    fun schedule(routine: Routine) {
+        Timber.d("Scheduling alarms for routine: ${routine.name} (${routine.uuid})")
 
-        // Cancelar alarmas existentes antes de programar nuevas
-        cancel(routine)
+        // Iterar sobre cada trigger asociado a la rutina
+        for (trigger in routine.triggers) {
+            Timber.d("Processing trigger: ${trigger.uuid} for routine: ${routine.name}")
 
-        // Only schedule if the routine is enabled
-        if (!routine.isEnabled) {
-            Timber.d("Rutina ${routine.name} (${routine.uuid}) está deshabilitada. No se programarán alarmas.")
-            return
+//            val alarmId = generateAlarmId(routine.uuid, trigger.uuid)
+
+
+            // <<-- PASO CLAVE: Calcular el tiempo de la próxima alarma -->>
+            // Necesitas una función que, dado un trigger y el tiempo actual,
+            // calcule la próxima vez que debería dispararse.
+            val nextAlarmTimeMillis = calculateNextAlarmTimeMillis(trigger, routine) // Pasa la rutina
+
+            if (nextAlarmTimeMillis > System.currentTimeMillis()) {
+                // Solo programar si el próximo tiempo está en el futuro
+                val alarmId = generateAlarmId(routine.uuid, trigger.uuid) // Usar la sobrecarga con UUIDs
+                val pendingIntent = createPendingIntent(alarmId, routine.uuid, trigger.uuid) // Crear un PendingIntent único para este trigger
+
+                Timber.d("Scheduling alarm for routine: ${routine.name}, trigger: ${trigger.uuid} at: ${LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(nextAlarmTimeMillis), ZoneId.systemDefault())} with alarmId: $alarmId")
+
+                // <<-- Usar AlarmManager para programar la alarma -->>
+                // Usa RTC_WAKEUP para despertar el dispositivo si está en modo Doze
+                alarmManager.setExactAndAllowWhileIdle( // setExactAndAllowWhileIdle es bueno para la precisión y Doze
+                    AlarmManager.RTC_WAKEUP,
+                    nextAlarmTimeMillis,
+                    pendingIntent
+                )
+            } else {
+                Timber.w("Skipping scheduling for trigger ${trigger.uuid}: next alarm time is in the past or now. Consider recalculating and scheduling the very next one if logic requires.")
+                // TODO: Podrías necesitar lógica aquí para recalcular la próxima alarma si la calculada
+                //  inicialmente está en el pasado. Esto depende de tu implementación de calculateNextAlarmTimeMillis.
+            }
+        }
+        Timber.d("Finished scheduling for routine: ${routine.name}")
+    }
+
+    // Helper para calcular el tiempo de la próxima alarma en milisegundos Epoch
+    // Función para calcular la próxima hora de alarma en milisegundos Epoch
+    private fun calculateNextAlarmTimeMillis(trigger: Trigger, routine: Routine): Long {
+        Timber.d("Calculating next alarm time for trigger: ${trigger.uuid}, type: ${trigger.triggerType}")
+
+        // Obtener la hora y minuto comunes para triggers de tiempo y calendario (si aplica)
+        val hour = (trigger.data.data["hour"] as? Int)
+        val minute = (trigger.data.data["minute"] as? Int)
+
+        // Obtener la fecha de inicio y fin del trigger (si aplica)
+        val startDate = trigger.startDate
+        val endDate = trigger.endDate
+
+        // Obtener la zona horaria del sistema
+        val zoneId = ZoneId.systemDefault()
+
+        // Obtener la fecha y hora actual en la zona horaria del sistema
+        val now = ZonedDateTime.now(zoneId)
+
+        // Verificar si la alarma está dentro del rango de fechas si startDate o endDate existen
+        if (startDate != null && now.toLocalDateTime().isBefore(startDate)) {
+            Timber.d("Trigger start date is in the future. Not scheduling yet.")
+            return 0L // Start date is in the future, don't schedule yet
+        }
+        if (endDate != null && now.toLocalDateTime().isAfter(endDate)) {
+            Timber.d("Trigger end date is in the past. Not scheduling.")
+            return 0L // End date is in the past, don't schedule
         }
 
-        routine.triggers.forEach { trigger ->
-            when (trigger.triggerType) {
-                "TIME" -> scheduleTimeTrigger(routine, trigger)
-                "CALENDAR" -> scheduleCalendarTrigger(routine, trigger) // <<-- NUEVO: Manejar CALENDAR
-                // Add other trigger types here in the future
-                else -> Timber.w("Tipo de trigger desconocido: ${trigger.triggerType} para rutina ${routine.name}")
+
+        return when (trigger.triggerType) {
+            TriggerTypeDialog.TriggerType.TIME -> {
+                Timber.d("Calculating for TIME trigger")
+                // Lógica para triggers de tipo TIME (diario, semanal, mensual)
+
+                // Asegurarse de que hour y minute no sean nulos para triggers TIME
+                if (hour == null || minute == null) {
+                    Timber.e("TIME trigger is missing hour or minute data for trigger UUID: ${trigger.uuid}")
+                    return 0L // Datos de hora/minuto faltantes
+                }
+
+                val frequency = trigger.data.data["frequency"] as? FrequencyType
+
+                when (frequency) {
+                    FrequencyType.ONCE -> {
+                        Timber.d("Calculating for TIME trigger - Once frequency")
+                        // Para triggers de tiempo "once", calcular solo si la hora ya pasó hoy
+                        var nextAlarmTime = now.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+
+                        // Si la hora ya pasó hoy, programar para mañana (este es el comportamiento "diario" de tu lógica original)
+                        if (nextAlarmTime.isBefore(now)) {
+                            nextAlarmTime = nextAlarmTime.plusDays(1)
+                            Timber.d("TIME Once trigger time already passed today, scheduling for tomorrow.")
+                        } else {
+                            Timber.d("TIME Once trigger time is in the future today.")
+                        }
+
+                        // Dado que es "once", solo programamos para la próxima ocurrencia y luego esta lógica no debería volver a programarla.
+                        // La cancelación después de la ejecución se manejará en RoutineExecutionService.
+                        nextAlarmTime.toInstant().toEpochMilli()
+                    }
+                    FrequencyType.WEEKLY -> {
+                        Timber.d("Calculating for TIME trigger - Weekly frequency")
+                        val daysOfWeek = trigger.data.data["daysOfWeek"] as? List<Int>
+
+                        if (daysOfWeek.isNullOrEmpty()) {
+                            Timber.e("Weekly TIME trigger is missing daysOfWeek data or it's empty for trigger UUID: ${trigger.uuid}")
+                            return 0L // Datos de días de la semana faltantes
+                        }
+
+                        // Convertir los enteros de días de la semana a DayOfWeek (Java time)
+                        // 0 = Domingo, 6 = Sábado en tu lista
+                        // DayOfWeek.SUNDAY = 7, MONDAY = 1, ..., SATURDAY = 6 en Java time
+                        // Mapeo: 0->SUNDAY, 1->MONDAY, ..., 6->SATURDAY
+                        val javaDaysOfWeek = daysOfWeek.mapNotNull { dayInt ->
+                            try {
+                                // Adjust index: Monday (1) is the first day of the week in DayOfWeek enum values
+                                when(dayInt) {
+                                    0 -> DayOfWeek.SUNDAY // Domingo
+                                    1 -> DayOfWeek.MONDAY // Lunes
+                                    2 -> DayOfWeek.TUESDAY // Martes
+                                    3 -> DayOfWeek.WEDNESDAY // Miércoles
+                                    4 -> DayOfWeek.THURSDAY // Jueves
+                                    5 -> DayOfWeek.FRIDAY // Viernes
+                                    6 -> DayOfWeek.SATURDAY // Sábado
+                                    else -> null // Ignorar valores inválidos
+                                }
+                            } catch (e: Exception) {
+                                Timber.e(e, "Invalid day of week integer: $dayInt for trigger UUID: ${trigger.uuid}")
+                                null // Si hay un error en la conversión
+                            }
+                        }.toSet() // Usar Set para búsquedas eficientes
+
+                        if (javaDaysOfWeek.isEmpty()) {
+                            Timber.e("No valid days of week found for weekly TIME trigger UUID: ${trigger.uuid}")
+                            return 0L // No hay días válidos para programar
+                        }
+
+                        // Encontrar la próxima ocurrencia en los días de la semana especificados
+                        var nextAlarmTime: ZonedDateTime? = null
+                        var currentCheckDay = now.toLocalDate() // Empezamos buscando desde hoy
+
+                        // Buscar en los próximos 7 días para encontrar la próxima ocurrencia
+                        for (i in 0..7) {
+                            val potentialDate = currentCheckDay.plusDays(i.toLong())
+                            val potentialDayOfWeek = potentialDate.dayOfWeek
+
+                            if (javaDaysOfWeek.contains(potentialDayOfWeek)) {
+                                // Este día de la semana es uno de los días seleccionados
+                                val timeAtPotentialDate = potentialDate.atTime(hour, minute).atZone(zoneId)
+
+                                // Si es hoy y la hora ya pasó, buscar el siguiente día de la semana válido
+                                if (timeAtPotentialDate.isAfter(now)) {
+                                    nextAlarmTime = timeAtPotentialDate
+                                    break // Encontramos la próxima hora válida
+                                } else if (potentialDate.isAfter(now.toLocalDate())) {
+                                    // Es un día futuro seleccionado, y la hora es válida
+                                    nextAlarmTime = timeAtPotentialDate
+                                    break // Encontramos la próxima hora válida
+                                }
+                                // Si es hoy y la hora ya pasó, continuaremos el bucle al siguiente día
+                            }
+                            // Si el día actual no es un día seleccionado, el bucle pasará al siguiente día
+                        }
+
+                        // Si no encontramos la próxima ocurrencia en los próximos 7 días (lo cual no debería pasar con al menos un día seleccionado),
+                        // esto puede indicar un error lógico o que todos los días seleccionados ya pasaron esta semana y la próxima ocurrencia es en la siguiente.
+                        // La lógica de arriba debería encontrar la próxima ocurrencia. Si nextAlarmTime es nulo, algo salió mal.
+                        nextAlarmTime?.toInstant()?.toEpochMilli() ?: run {
+                            Timber.e("Could not find next valid weekly time for trigger UUID: ${trigger.uuid}")
+                            0L // Fallback en caso de que no se encuentre una hora válida
+                        }
+
+                    }
+                    FrequencyType.MONTHLY -> {
+                        Timber.d("Calculating for TIME trigger - Monthly frequency")
+                        val dayOfMonth = trigger.data.data["dayOfMonth"] as? Int
+
+                        if (dayOfMonth == null || dayOfMonth !in 1..31) {
+                            Timber.e("Monthly TIME trigger has invalid or missing dayOfMonth data ($dayOfMonth) for trigger UUID: ${trigger.uuid}")
+                            return 0L // Datos de día del mes faltantes o inválidos
+                        }
+
+                        // Obtener la fecha actual y el mes actual
+                        val currentYear = now.year
+                        val currentMonth = now.monthValue
+
+                        // Intentar crear una fecha para el día y hora especificados en el mes actual
+                        var nextAlarmTimeCandidate: ZonedDateTime? = try {
+                            LocalDateTime.of(currentYear, currentMonth, dayOfMonth, hour, minute)
+                                .atZone(zoneId)
+                        } catch (e: Exception) {
+                            // Manejar casos donde el día del mes no existe en el mes actual (ej: 31 de Febrero)
+                            Timber.w(e, "Could not create LocalDateTime for monthly trigger date in current month: $currentYear-$currentMonth-$dayOfMonth at $hour:$minute for trigger UUID: ${trigger.uuid}")
+                            null // No se pudo crear la fecha en el mes actual
+                        }
+
+                        // Si la fecha candidata es nula (día inválido para el mes) o ya pasó, buscar en el próximo mes
+                        if (nextAlarmTimeCandidate == null || nextAlarmTimeCandidate.isBefore(now)) {
+                            Timber.d("Monthly trigger date in current month already passed or is invalid. Checking next month.")
+                            // Mover al próximo mes
+                            val nextMonth = now.toLocalDate().plusMonths(1)
+                            val nextYear = nextMonth.year
+                            val nextMonthValue = nextMonth.monthValue
+
+                            // Intentar crear una fecha para el día y hora especificados en el próximo mes
+                            nextAlarmTimeCandidate = try {
+                                LocalDateTime.of(nextYear, nextMonthValue, dayOfMonth, hour, minute)
+                                    .atZone(zoneId)
+                            } catch (e: Exception) {
+                                // Manejar casos donde el día del mes no existe en el próximo mes
+                                Timber.e(e, "Could not create LocalDateTime for monthly trigger date in next month: $nextYear-$nextMonthValue-$dayOfMonth at $hour:$minute for trigger UUID: ${trigger.uuid}. This trigger might not be schedulable.")
+                                null // Fallback si el día es inválido incluso en el próximo mes (ej: 31 de un mes de 30 días)
+                            }
+                        }
+
+                        // Si aún no hemos encontrado una fecha válida, devolvemos 0L
+                        nextAlarmTimeCandidate?.toInstant()?.toEpochMilli() ?: run {
+                            Timber.e("Failed to find valid monthly time for trigger UUID: ${trigger.uuid}")
+                            0L
+                        }
+                    }
+                    else -> {
+                        Timber.e("Unknown frequency type for TIME trigger: $frequency for trigger UUID: ${trigger.uuid}")
+                        0L // Frecuencia desconocida
+                    }
+                }
             }
+            TriggerTypeDialog.TriggerType.CALENDAR -> {
+                Timber.d("Calculating for CALENDAR trigger")
+                // Lógica para triggers de tipo CALENDAR (una fecha y hora específica)
+
+                val year = trigger.data.data["year"] as? Int
+                val month = trigger.data.data["month"] as? Int // 1-12
+                val day = trigger.data.data["day"] as? Int
+
+                // Asegurarse de que todos los datos de fecha/hora estén presentes
+                if (year == null || month == null || day == null || hour == null || minute == null) {
+                    Timber.e("CALENDAR trigger is missing date or time data for trigger UUID: ${trigger.uuid}")
+                    return 0L // Datos faltantes
+                }
+
+                // Intentar crear la fecha y hora del trigger
+                val triggerDateTime = try {
+                    LocalDateTime.of(year, month, day, hour, minute)
+                } catch (e: Exception) {
+                    Timber.e(e, "Invalid date/time data for CALENDAR trigger: $year-$month-$day at $hour:$minute for trigger UUID: ${trigger.uuid}")
+                    return 0L // Datos de fecha/hora inválidos
+                }
+
+                // Convertir a ZonedDateTime para comparación y obtener milisegundos
+                val triggerZonedDateTime = triggerDateTime.atZone(zoneId)
+
+                // Si la fecha y hora del trigger ya pasaron, no programar
+                if (triggerZonedDateTime.isBefore(now)) {
+                    Timber.d("CALENDAR trigger date and time have already passed for trigger UUID: ${trigger.uuid}")
+                    return 0L // Ya pasó
+                }
+
+                // Si la fecha y hora del trigger están en el futuro, devolver los milisegundos Epoch
+                triggerZonedDateTime.toInstant().toEpochMilli()
+            }
+            TriggerTypeDialog.TriggerType.LOCATION -> {
+                Timber.d("Calculating for LOCATION trigger - Not programmable with AlarmManager")
+                // Los triggers de tipo LOCATION no se programan con AlarmManager.
+                // Su lógica de activación se maneja por separado (BroadcastReceiver, Service, etc.).
+                0L // Devuelve 0L para indicar que no hay una hora fija para programar
+            }
+            // No necesitamos un 'else' si hemos manejado todos los casos de la enumeración
         }
     }
 
@@ -96,8 +348,8 @@ class AlarmScheduler @Inject constructor(
 
             // Only schedule if the trigger time is in the future
             if (triggerMillis > System.currentTimeMillis()) {
-                val alarmId = generateAlarmId(routine, trigger)
-                val pendingIntent = createPendingIntent(routine, alarmId)
+                val alarmId = generateAlarmId(routine.uuid, trigger.uuid)
+                val pendingIntent = createPendingIntent(alarmId, routine.uuid, trigger.uuid)
 
                 Timber.d("Programando alarma de CALENDARIO para ${routine.name}, fecha: $triggerDateTime, id: $alarmId")
 
@@ -142,6 +394,7 @@ class AlarmScheduler @Inject constructor(
 
         // <<-- NUEVO: Usar LocalDateTime para calcular la próxima ocurrencia -->>
         val now = LocalDateTime.now()
+
         var nextTriggerTime = now.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
 
         when (frequency) {
@@ -215,8 +468,8 @@ class AlarmScheduler @Inject constructor(
 
         val nextTriggerMillis = nextTriggerTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
-        val alarmId = generateAlarmId(routine, trigger)
-        val pendingIntent = createPendingIntent(routine, alarmId)
+        val alarmId = generateAlarmId(routine.uuid, trigger.uuid)
+        val pendingIntent = createPendingIntent(alarmId, routine.uuid, trigger.uuid)
 
         Timber.d("Programando alarma de TIEMPO $frequency para ${routine.name} (${hour}:${minute}), próximo disparo: $nextTriggerTime, id: $alarmId")
 
@@ -261,43 +514,62 @@ class AlarmScheduler @Inject constructor(
     // Función para cancelar una alarma específica por UUID de rutina y UUID de trigger
     // Signature based on the service calling cancelSingleAlarm(routine.uuid, trigger.uuid)
     fun cancelSingleAlarm(routineUuid: String, triggerUuid: String) {
-        Timber.d("AlarmScheduler: Cancelling single alarm for routine UUID: $routineUuid, trigger UUID: $triggerUuid")
-        // TODO: Implement actual cancellation logic.
-        //  This will involve recreating the PendingIntent using the same logic
-        //  as when scheduling, and then calling pendingIntent.cancel()
-        val alarmId = generateAlarmId(routineUuid, triggerUuid) // Need a generateAlarmId function that takes UUIDs
-        val pendingIntent = createPendingIntentForCancellation(routineUuid, alarmId) // Need a dedicated function for cancellation PendingIntent
+        Timber.d("AlarmScheduler: Attempting to cancel single alarm for routine UUID: $routineUuid, trigger UUID: $triggerUuid")
 
-        pendingIntent?.cancel()
-        Timber.d("AlarmScheduler: Attempted to cancel alarm with ID: $alarmId")
-    }
+        // Calcular el alarmId de la misma manera que se hizo al programar
+        val alarmId = generateAlarmId(routineUuid, triggerUuid)
+        Timber.d("AlarmScheduler: Calculated alarm ID for cancellation: $alarmId")
 
-    // Función para cancelar todas las alarmas de una rutina.
-    // Signature based on the service calling alarmScheduler.cancelRoutineAlarms(routine)
-    // Accepts Routine object because the service passes it and it's likely needed to get triggers
-    suspend fun cancelRoutineAlarms(routine: Routine) { // Made suspend as it might need to read triggers from DB
-        Timber.d("AlarmScheduler: Cancelling alarms for routine: ${routine.name} (${routine.uuid})")
-        // TODO: Implement actual cancellation logic.
-        //  This will involve fetching triggers for the routine (potentially suspend operation via repository)
-        //  and then cancelling each one using logic similar to cancelSingleAlarm.
+        // Crear el PendingIntent idéntico al que se usó para programar
+        // Asegúrate de que createPendingIntentForCancellation use los mismos extras que createPendingIntent
+        val pendingIntent = createPendingIntentForCancellation(routineUuid, triggerUuid, alarmId)
 
-        // Example conceptual implementation:
-        val triggers = routineRepository.getTriggersForRoutine(routine.id) // Assuming you can get triggers this way
-
-        triggers.forEach { trigger ->
-            cancelSingleAlarm(routine.uuid, trigger.uuid.toString()) // Use the single cancellation logic
+        // Cancelar la alarma
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        try {
+            alarmManager.cancel(pendingIntent)
+            Timber.i("AlarmScheduler: Successfully requested cancellation for alarm ID: $alarmId")
+        } catch (e: SecurityException) {
+            // Esto puede ocurrir si la app perdió los permisos o si hay algún problema con el PendingIntent
+            Timber.e(e, "AlarmScheduler: SecurityException while attempting to cancel alarm ID: $alarmId. Check permissions.")
+        } catch (e: Exception) {
+            Timber.e(e, "AlarmScheduler: Error canceling alarm ID: $alarmId")
         }
 
-        Timber.d("AlarmScheduler: Finished attempting to cancel alarms for routine: ${routine.uuid}")
+        // Aunque AlarmManager.cancel() marca el PendingIntent para cancelación,
+        // a veces puede ser útil llamar a pendingIntent.cancel() también,
+        // especialmente si quieres liberar recursos asociados a ese PendingIntent.
+        // pendingIntent?.cancel() // Esto es opcional y depende de si necesitas invalidar el PendingIntent de inmediato.
+    }
+
+    // Esta función cancela todas las alarmas asociadas a una rutina específica.
+// Es útil cuando deshabilitas o eliminas una rutina.
+    fun cancelRoutineAlarms(routine: Routine) {
+        Timber.d("AlarmScheduler: Attempting to cancel all alarms for routine: ${routine.name} (${routine.uuid})")
+        if (routine.triggers.isEmpty()) {
+            Timber.d("AlarmScheduler: Routine has no triggers, nothing to cancel.")
+            return
+        }
+
+        routine.triggers.forEach { trigger ->
+            // Para cada trigger de la rutina, llamamos a cancelSingleAlarm
+            // Esto cancelará la alarma específica asociada a este trigger.
+            // Los triggers de tipo LOCATION (si no se programan con AlarmManager)
+            // no tendrán una PendingIntent programada con AlarmManager,
+            // por lo que calling cancelSingleAlarm para ellos no tendrá efecto en AlarmManager,
+            // lo cual es el comportamiento deseado.
+            cancelSingleAlarm(routine.uuid, trigger.uuid)
+        }
+        Timber.i("AlarmScheduler: Completed attempts to cancel alarms for routine: ${routine.name} (${routine.uuid})")
     }
 
     // Función para cancelar una alarma específica por UUID de rutina y Alarm ID
     // Signature based on the service calling cancelSingleAlarmByInfo(routineUuid, alarmId)
-    fun cancelSingleAlarmByInfo(routineUuid: String, alarmId: Int) {
+    fun cancelSingleAlarmByInfo(routineUuid: String, triggerUuid: String, alarmId: Int) {
         Timber.d("AlarmScheduler: Cancelling single alarm by info for routine UUID: $routineUuid, alarm ID: $alarmId")
         // TODO: Implement actual cancellation logic.
         //  This is similar to cancelSingleAlarm, but you already have the alarmId.
-        val pendingIntent = createPendingIntentForCancellation(routineUuid, alarmId)
+        val pendingIntent = createPendingIntentForCancellation(routineUuid, triggerUuid, alarmId) // Ahora triggerUuid existe
 
         pendingIntent?.cancel()
         Timber.d("AlarmScheduler: Attempted to cancel alarm with ID: $alarmId")
@@ -305,8 +577,8 @@ class AlarmScheduler @Inject constructor(
     
     // <<-- NUEVO: Función genérica para cancelar cualquier tipo de trigger -->>
     private fun cancelTrigger(routine: Routine, trigger: Trigger) {
-        val alarmId = generateAlarmId(routine, trigger)
-        val pendingIntent = createPendingIntent(routine, alarmId)
+        val alarmId = generateAlarmId(routine.uuid, trigger.uuid)
+        val pendingIntent = createPendingIntent(alarmId, routine.uuid, trigger.uuid)
         alarmManager.cancel(pendingIntent)
         Timber.d("Alarma cancelada para ${routine.name}, trigger id: $alarmId")
     }
@@ -328,14 +600,14 @@ class AlarmScheduler @Inject constructor(
     }
 
     // CORRECTED: This function creates the PendingIntent
-    private fun createPendingIntent(routine: Routine, alarmId: Int): PendingIntent {
+    private fun createPendingIntent(alarmId: Int, routineUuid: String, triggerUuid: String): PendingIntent {
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId)
-            putExtra(AlarmReceiver.EXTRA_ROUTINE_UUID, routine.uuid) // Pasar UUID
-            // Potentially add trigger UUID as well if needed in the receiver
-            //putExtra("TRIGGER_UUID", trigger.uuid) // <<-- Opcional: pasar UUID del trigger
+            putExtra(AlarmReceiver.EXTRA_ROUTINE_UUID, routineUuid) // Usa el parámetro routineUuid
+            putExtra(AlarmReceiver.EXTRA_TRIGGER_UUID, triggerUuid) // Usa el parámetro triggerUuid (asumiendo que quieres pasarlo)
         }
         // Use FLAG_UPDATE_CURRENT to update the extra data if the same alarmId is used
+        // FLAG_IMMUTABLE is required in recent Android versions
         return PendingIntent.getBroadcast(
             context,
             alarmId,
@@ -344,25 +616,24 @@ class AlarmScheduler @Inject constructor(
         )
     }
 
-    private fun createPendingIntentForCancellation(routineUuid: String, alarmId: Int): PendingIntent {
+    private fun createPendingIntentForCancellation(routineUuid: String, triggerUuid: String, alarmId: Int): PendingIntent {
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId)
-            putExtra(AlarmReceiver.EXTRA_ROUTINE_UUID, routineUuid) // Usar el UUID pasado como String
-            // <<-- ¡IMPORTANTE! Si descomentaste y usas putExtra("TRIGGER_UUID", trigger.uuid) en createPendingIntent,
-            // debes añadirlo aquí también, pero necesitarás el triggerUuid como parámetro de esta función!
-            // Si no pasas triggerUuid a esta función, no podrás recrear el Intent exacto si incluyes ese extra.
-            // Esto afectaría a cancelSingleAlarmByInfo si necesita ese extra.
-            // Si triggerUuid SÓLO se usa para generar el alarmId y NO como extra en el Intent, entonces está bien.
-            // Verifica si descomentaste o usas putExtra("TRIGGER_UUID", ...) en createPendingIntent.
+            putExtra(AlarmReceiver.EXTRA_ROUTINE_UUID, routineUuid)
+            putExtra(AlarmReceiver.EXTRA_TRIGGER_UUID, triggerUuid)
         }
 
-        // Use FLAG_NO_CREATE para buscar el PendingIntent existente
-        // Usa los mismos flags adicionales que en createPendingIntent
+        // <<<--- Cambia los flags aquí para que coincidan con createPendingIntent --->>>
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+
+        // El request code DEBE ser el mismo que el alarmId
+        val requestCode = alarmId // Esto ya está correcto
+
         return PendingIntent.getBroadcast(
             context,
-            alarmId,
+            requestCode, // Usar alarmId como request code
             intent,
-            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            flags // <<<--- Usar los mismos flags --->>>
         )
     }
 
@@ -419,7 +690,7 @@ class AlarmScheduler @Inject constructor(
         // 2. Iterar sobre los triggers
         routine.triggers.forEach { trigger ->
             when (trigger.triggerType) {
-                "TIME" -> {
+                TriggerTypeDialog.TriggerType.TIME -> {
                     // 3, 4, 5: Programar trigger de tiempo
                     // Llama a tu función existente o crea una nueva si es necesario
                     // scheduleTimeTrigger(routine, trigger)
@@ -427,7 +698,7 @@ class AlarmScheduler @Inject constructor(
                     Timber.d("AlarmScheduler: Scheduling Time trigger: ${trigger.uuid}")
                     scheduleTimeTrigger(routine, trigger) // Llama a tu método existente
                 }
-                "CALENDAR" -> {
+                TriggerTypeDialog.TriggerType.CALENDAR -> {
                     // TODO: Implementar lógica para programar triggers de calendario
                     Timber.d("AlarmScheduler: Scheduling Calendar trigger: ${trigger.uuid} (TODO)")
                     // scheduleCalendarTrigger(routine, trigger) // Necesitarás crear esta función

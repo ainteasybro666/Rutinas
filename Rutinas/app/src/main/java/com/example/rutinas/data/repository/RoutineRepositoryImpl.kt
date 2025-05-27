@@ -136,10 +136,14 @@ class RoutineRepositoryImpl @Inject constructor(
         Timber.d("Repository: Updating routine: ${routine.name} with ID: ${routine.id}")
     }
 
-    // NEW: Implement the deleteRoutine function
     override suspend fun deleteRoutine(routine: Routine) {
         Timber.d("Repository: Deleting routine with ID: ${routine.id} and UUID: ${routine.uuid}")
+        // Llama a la función deleteRoutine del DAO, pasando la entidad RoutineEntity
+        routineDao.deleteRoutine(routine.toRoutineEntity())
+        Timber.d("Repository: Routine with ID: ${routine.id} deleted.")
     }
+
+
 
     override suspend fun getTriggersForRoutine(routineId: Long): List<Trigger> {
         // Llama a la función suspend en TriggerDao

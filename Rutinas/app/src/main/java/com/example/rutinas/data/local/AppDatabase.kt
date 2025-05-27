@@ -11,7 +11,7 @@ import com.example.rutinas.data.local.dao.ActionDao
 import com.example.rutinas.data.local.dao.RoutineDao
 import com.example.rutinas.data.local.dao.TriggerDao
 import com.example.rutinas.data.model.Action
-import com.example.rutinas.data.model.DataWrapperTypeConverter
+import com.example.rutinas.data.local.DataWrapperTypeConverter
 import com.example.rutinas.data.model.Trigger
 import com.example.rutinas.data.model.RoutineEntity
 
