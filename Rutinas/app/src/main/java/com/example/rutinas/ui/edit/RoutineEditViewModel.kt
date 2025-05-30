@@ -169,7 +169,7 @@ class RoutineEditViewModel @Inject constructor(
 
             Timber.d("ViewModel: Iniciando validación de triggers antes de guardar. Cantidad: ${_triggers.value.size}")
 
-            // Validaciones de triggers
+            // Validaciones de triggers (tu código de validación actual está bien, lo dejamos igual)
             for (trigger in _triggers.value) {
                 Timber.d("ViewModel: Validando trigger con UUID: ${trigger.uuid}, Tipo: ${trigger.triggerType}")
                 Timber.d("ViewModel: Trigger data para validación: ${trigger.data.data}") // <<< Log de datos antes de validación
@@ -243,20 +243,25 @@ class RoutineEditViewModel @Inject constructor(
                 Timber.d("ViewModel: Rutina a guardar: ID=${routineToSave.id}, UUID=${routineToSave.uuid}, Nombre=${routineToSave.name}, Triggers size=${routineToSave.triggers.size}, Actions size=${routineToSave.actions.size}")
 
 
-                val resultId = if (isNewRoutine) {
-                    val insertedId = repository.insertRoutine(routineToSave)
-                    Timber.d("ViewModel: Rutina INSERTADA con ID: $insertedId")
-                    insertedId
-                } else {
-                    Timber.d("ViewModel: Rutina ACTUALIZANDO existente con ID: ${routineToSave.id}")
-                    repository.updateRoutine(routineToSave)
-                    routineToSave.id
-                }
+                // Llama al méto-do de guardado/actualización transaccional en el repositorio
+                // Usa insertRoutine si tu implementacion ya maneja la lógica de actualizacion de hijos.
+                val savedRoutineId = repository.insertRoutine(routineToSave) // Asumimos que este método ahora maneja la lógica completa y devuelve el ID de la rutina principal
 
-                val savedRoutine = repository.getRoutineById(resultId)
+
+                Timber.d("ViewModel: Rutina guardada/actualizada con ID: $savedRoutineId")
+
+                // <<<--- PASO CRUCIAL: Cargar la rutina COMPLETA con sus relaciones actualizadas desde la BD --->>>
+                // Usa un nuevo méto-do en tu repositorio que use la relación @Relation
+                // Por ejemplo, podrías necesitar añadir a RoutineRepository y RoutineRepositoryImpl:
+                // suspend fun getRoutineWithDetails(routineId: Long): Routine?
+
+                // Asegúrate de haber añadido el méto-do getRoutineWithRelationsById en RoutineDao
+                // y exponerlo en RoutineRepositoryImpl (por ejemplo, mapeando a Routine de dominio)
+                val savedRoutine = repository.getRoutineById(savedRoutineId) // <<-- Asumiendo que getRoutineById ahora usa RoutineWithRelations o carga manualmente las relaciones correctamente
+
 
                 if (savedRoutine != null) {
-                    Timber.d("ViewModel: Rutina guardada obtenida de nuevo (ID: $resultId) para programar alarmas.")
+                    Timber.d("ViewModel: Rutina guardada obtenida de nuevo (ID: $savedRoutineId) para programar alarmas. Triggers re-cargados size: ${savedRoutine.triggers.size}")
                     // <<< Inspeccionar el DataWrapper del trigger de tiempo en la rutina recién guardada (obtenida de nuevo)
                     val savedTimeTrigger = savedRoutine.triggers.find { it.triggerType == TriggerTypeDialog.TriggerType.TIME }
                     if (savedTimeTrigger != null) {
@@ -268,27 +273,28 @@ class RoutineEditViewModel @Inject constructor(
                         Timber.d("ViewModel: No se encontró trigger de tiempo en la rutina GUARDADA (obtenida de nuevo).")
                     }
 
+                    // Programa las alarmas usando la rutina recién cargada
                     alarmScheduler.scheduleRoutineAlarms(savedRoutine)
                     Timber.d("ViewModel: alarmScheduler.scheduleRoutineAlarms() llamado con rutina ID: ${savedRoutine.id}")
+
+                    // Opcional: Actualiza los StateFlows del ViewModel con la rutina recién cargada de la BD
+                    // Esto asegura que el ViewModel refleje exactamente lo que hay en la BD,
+                    // incluyendo IDs de triggers/actions si fueron autogenerados.
+                    _currentRoutine.value = savedRoutine
+                    _triggers.value = savedRoutine.triggers.toList()
+                    _actions.value = savedRoutine.actions.toList()
+                    Timber.d("ViewModel: StateFlows actualizados con la rutina re-cargada de la BD.")
+
+
                 } else {
-                    Timber.e("ViewModel: No se pudo obtener la rutina guardada (ID: $resultId) para programar alarmas.")
+                    Timber.e("ViewModel: No se pudo obtener la rutina guardada (ID: $savedRoutineId) con relaciones para programar alarmas.")
                 }
 
-                _saveResult.emit(Resource.Success(resultId))
+                _saveResult.emit(Resource.Success(savedRoutineId))
 
-                if (isNewRoutine) {
-                    Timber.d("ViewModel: Es nueva rutina, actualizando _currentRoutine con ID: $resultId")
-                    _currentRoutine.value = routineToSave.copy(id = resultId, uuid = routineToSave.uuid)
-                    _triggers.update { currentList -> currentList.map { it.copy(routineId = resultId) }.toList() }
-                    _actions.update { currentList -> currentList.map { it.copy(routineId = resultId) }.toList() }
-                    isNewRoutine = false
-                    Timber.d("ViewModel: _currentRoutine, _triggers, _actions actualizados para nueva rutina.")
-                } else {
-                    Timber.d("ViewModel: Rutina existente actualizada. StateFlows ya deberían tener los datos correctos.")
-                }
+                isNewRoutine = false // La rutina ya no es nueva después de guardarla
 
-
-                Timber.d("ViewModel: Rutina guardada con éxito, ID: $resultId")
+                Timber.d("ViewModel: Rutina guardada con éxito, ID: $savedRoutineId")
 
             } catch (e: Exception) {
                 Timber.e("ViewModel: Error inesperado al guardar rutina: ${e.message}", e)

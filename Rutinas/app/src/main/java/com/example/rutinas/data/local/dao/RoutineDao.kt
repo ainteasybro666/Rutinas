@@ -40,4 +40,8 @@ interface RoutineDao {
 
         @Update
         suspend fun update(routine: RoutineEntity)
+
+        @Transaction
+        @Query("SELECT * FROM routines WHERE id = :routineId")
+        suspend fun getRoutineWithRelationsById(routineId: Long): AppDatabase.RoutineWithRelations?
 }

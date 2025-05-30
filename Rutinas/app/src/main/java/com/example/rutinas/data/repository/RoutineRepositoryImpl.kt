@@ -1,10 +1,12 @@
 package com.example.rutinas.data.repository
 
+import androidx.room.Transaction
 import com.example.rutinas.alarms.AlarmScheduler
 import com.example.rutinas.data.local.dao.ActionDao
 import com.example.rutinas.data.local.dao.RoutineDao
 import com.example.rutinas.data.local.dao.TriggerDao
 import com.example.rutinas.data.local.AppDatabase
+import com.example.rutinas.data.mapper.toEntity
 import com.example.rutinas.data.model.RoutineEntity
 import com.example.rutinas.data.model.Action
 import com.example.rutinas.data.model.Trigger
@@ -58,23 +60,114 @@ class RoutineRepositoryImpl @Inject constructor(
         Timber.d("Repository: Routine status updated for ID: $routineId")
     }
 
+    @Transaction
     override suspend fun insertRoutine(routine: Routine): Long {
-        Timber.d("Repository: Inserting routine: ${routine.name}")
+        // Renombramos o refactorizamos este método para que sea más genérico.
+        // La lógica principal se moverá a saveOrUpdateRoutineWithDetails.
+        // Por ahora, dejemoslo así pero sepamos que la lógica de guardado real estará en el nuevo método.
+        // Eventualmente, podrías querer que este método simplemente llame a saveOrUpdateRoutineWithDetails.
+        Timber.w("Repository: Calling deprecated insertRoutine. Use saveOrUpdateRoutineWithDetails instead.")
+        return saveOrUpdateRoutineWithDetails(routine)
+    }
 
+//    override suspend fun insertRoutine(routine: Routine): Long {
+//        Timber.d("Repository: Inserting routine: ${routine.name}")
+//
+//        val routineEntity = routine.toRoutineEntity()
+//        val routineId = routineDao.insertRoutine(routineEntity)
+//        Timber.d("Repository: Routine inserted with ID: $routineId")
+//
+//        // Asociar triggers y actions con el nuevo routineId
+//        val triggersToInsert = routine.triggers.map { it.copy(routineId = routineId) }
+//        triggersToInsert.forEach { triggerDao.insertTrigger(it) }
+//
+//        val actionsToInsert = routine.actions.map { it.copy(routineId = routineId) }
+//        actionsToInsert.forEach { actionDao.insert(it) }
+//
+//        Timber.d("Repository: Triggers and actions inserted for routine ID: $routineId")
+//
+//        return routineId
+//    }
+
+    @Transaction
+    suspend fun saveOrUpdateRoutineWithDetails(routine: Routine): Long {
+        Timber.d("Repository: Saving or updating routine: ${routine.name}")
+
+        // 1. Guardar o actualizar la rutina principal
         val routineEntity = routine.toRoutineEntity()
-        val routineId = routineDao.insertRoutine(routineEntity)
-        Timber.d("Repository: Routine inserted with ID: $routineId")
+        val routineId = routineDao.insertRoutine(routineEntity) // Usa insert con OnConflictStrategy.REPLACE para manejar updates by primary key
+        Timber.d("Repository: Routine saved/updated with ID: $routineId")
 
-        // Asociar triggers y actions con el nuevo routineId
-        val triggersToInsert = routine.triggers.map { it.copy(routineId = routineId) }
-        triggersToInsert.forEach { triggerDao.insertTrigger(it) }
+        // 2. Obtener los triggers y acciones actuales de la base de datos para esta rutina
+        // Esto es importante para saber qué triggers/actions existen y cuáles deben ser eliminados
+        val existingTriggers = triggerDao.getTriggersForRoutine(routineId).associateBy { it.uuid }
+        val existingActions = actionDao.getActionsForRoutine(routineId).associateBy { it.uuid }
 
-        val actionsToInsert = routine.actions.map { it.copy(routineId = routineId) }
-        actionsToInsert.forEach { actionDao.insert(it) }
+        // 3. Procesar los triggers de la rutina que se está guardando
+        val triggersToProcess = routine.triggers.associateBy { it.uuid }
 
-        Timber.d("Repository: Triggers and actions inserted for routine ID: $routineId")
+        // Identificar triggers a eliminar (los que están en DB pero no en la rutina a guardar)
+        existingTriggers.keys.minus(triggersToProcess.keys).forEach { uuidToRemove ->
+            existingTriggers[uuidToRemove]?.let { triggerDao.delete(it) }
+            Timber.d("Repository: Deleted trigger with UUID: $uuidToRemove for routine ID: $routineId")
+        }
 
-        return routineId
+        // Identificar triggers a insertar o actualizar
+        triggersToProcess.values.forEach { trigger ->
+            val triggerEntity = trigger.toEntity(routineId) // Usa la función de conversión con routineId
+
+            if (existingTriggers.containsKey(trigger.uuid)) {
+                // El trigger ya existe, actualizar
+                triggerDao.update(triggerEntity)
+                Timber.d("Repository: Updated existing trigger with UUID: ${trigger.uuid} for routine ID: $routineId")
+            } else {
+                // Es un trigger nuevo, insertar
+                // Asegúrate de que el ID sea 0L para que Room lo autogenere al insertar
+                val triggerToInsert = triggerEntity.copy(id = 0L, routineId = routineId) // Ensure ID is 0L for insert
+                triggerDao.insert(triggerToInsert)
+                Timber.d("Repository: Inserted new trigger with UUID: ${trigger.uuid} for routine ID: $routineId")
+            }
+        }
+
+        // 4. Procesar las actions de la rutina que se está guardando (lógica similar a triggers)
+        val actionsToProcess = routine.actions.associateBy { it.uuid }
+
+        // Identificar actions a eliminar
+        existingActions.keys.minus(actionsToProcess.keys).forEach { uuidToRemove ->
+            existingActions[uuidToRemove]?.let { actionDao.delete(it) }
+            Timber.d("Repository: Deleted action with UUID: $uuidToRemove for routine ID: $routineId")
+        }
+
+        // Identificar actions a insertar o actualizar
+        actionsToProcess.values.forEach { action ->
+            val actionEntity = action.toEntity(routineId)
+
+            if (existingActions.containsKey(action.uuid)) {
+                // La action ya existe, actualizar
+                actionDao.update(actionEntity)
+                Timber.d("Repository: Updated existing action with UUID: ${action.uuid} for routine ID: $routineId")
+            } else {
+                // Es una action nueva, insertar
+                val actionToInsert = actionEntity.copy(id = 0L, routineId = routineId) // Ensure ID is 0L for insert
+                actionDao.insert(actionToInsert)
+                Timber.d("Repository: Inserted new action with UUID: ${action.uuid} for routine ID: $routineId")
+            }
+        }
+
+
+        Timber.d("Repository: Finished processing triggers and actions for routine ID: $routineId")
+
+        // 5. (Opcional pero RECOMENDADO) Recargar la rutina completa con sus relaciones actualizadas
+        // para asegurar que la rutina que se pasa al ViewModel y luego al Scheduler
+        // tiene la información más reciente y correcta de la BD (incluyendo los IDs generados
+        // para los triggers/actions insertados si no los tenías ya).
+        // Necesitarás una consulta Room para obtener una rutina por ID con sus relaciones.
+        val savedRoutineWithRelations = routineDao.getRoutineWithRelationsById(routineId) // You'll need to add this query/relation in RoutineDao
+        Timber.d("Repository: Reloaded routine with relations after saving: ${savedRoutineWithRelations != null}")
+
+
+        // Retornar el ID o la rutina recargada, dependiendo de lo que tu ViewModel necesite
+        return routineId // Or return savedRoutineWithRelations?.toRoutineDomain()
     }
 
     override suspend fun updateActions(actions: List<Action>) {

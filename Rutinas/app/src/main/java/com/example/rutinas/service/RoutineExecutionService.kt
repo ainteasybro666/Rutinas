@@ -18,6 +18,7 @@ import androidx.core.app.NotificationCompat
 import com.example.rutinas.R
 import com.example.rutinas.data.model.Action
 import com.example.rutinas.data.model.ActionType
+import com.example.rutinas.data.model.FrequencyType
 import com.example.rutinas.routines.execution.RoutineExecutionListener
 import dagger.hilt.android.AndroidEntryPoint // Import Hilt annotation
 import timber.log.Timber
@@ -236,9 +237,9 @@ class RoutineExecutionService : Service(), RoutineExecutionListener {
 
                     firedTrigger?.let { trigger ->
                         if (trigger.triggerType == TriggerTypeDialog.TriggerType.TIME) { // Verifica que sea un trigger de tiempo
-                            val frequency = trigger.data.data?.get("frequency") as? String
+                            val frequency = trigger.data.getFrequencyType("frequency")
                             // Reprogramar solo si la frecuencia NO es "once"
-                            if (frequency != "once") {
+                            if (frequency != FrequencyType.ONCE) {
                                 Timber.d("Reprogramming recurring TIME trigger: ${trigger.uuid}")
                                 // Cancel the specific trigger before rescheduling (esto ya lo tienes)
                                 alarmScheduler.cancelSingleAlarm(routine.uuid, trigger.uuid)
@@ -251,6 +252,10 @@ class RoutineExecutionService : Service(), RoutineExecutionListener {
                                 // Si usas setRepeating, NECESITARÍAS cancelar explícitamente aquí
                                 // Assuming you are using setExact or setAlarmClock based on previous code
                             }
+
+                        // TODO: Add logic for CALENDAR triggers if they can be recurring (less common)
+                        // TODO: Add logic for LOCATION triggers (handled externally, not here)
+
                         } else if (trigger.triggerType == TriggerTypeDialog.TriggerType.CALENDAR) {
                             Timber.d("CALENDAR trigger fired. Not reprogramming as it's a one-time event.")
                             // Los triggers CALENDAR también son de una sola vez (según nuestra suposición actual)

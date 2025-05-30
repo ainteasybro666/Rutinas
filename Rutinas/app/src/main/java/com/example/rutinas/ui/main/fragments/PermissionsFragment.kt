@@ -10,8 +10,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
-import com.example.rutinas.databinding.FragmentPermissionsBinding // Asegúrate de que se genere esta clase
-import timber.log.Timber // Importar Timber
+import com.example.rutinas.databinding.FragmentPermissionsBinding
+import timber.log.Timber
 
 class PermissionsFragment : Fragment() {
 
@@ -56,6 +56,12 @@ class PermissionsFragment : Fragment() {
             Timber.d("PermissionsFragment: 'Request Notification Listener Permission' button clicked.")
             requestNotificationListenerPermission()
         }
+
+        // Add listener for the new button
+        binding.btnRequestExactAlarmPermission.setOnClickListener {
+            Timber.d("PermissionsFragment: 'Request Exact Alarm Permission' button clicked.")
+            requestExactAlarmPermission()
+        }
     }
 
     private fun checkAndDisplayPermissionStatus() {
@@ -64,20 +70,17 @@ class PermissionsFragment : Fragment() {
             if (Settings.canDrawOverlays(requireContext())) {
                 binding.tvOverlayPermissionStatus.text = "Estado: Concedido"
                 binding.tvOverlayPermissionStatus.setTextColor(resources.getColor(android.R.color.holo_green_dark, null))
-                binding.btnRequestOverlayPermission.visibility = View.GONE // Ocultar el botón si ya está concedido
+                binding.btnRequestOverlayPermission.visibility = View.GONE
             } else {
                 binding.tvOverlayPermissionStatus.text = "Estado: Denegado"
                 binding.tvOverlayPermissionStatus.setTextColor(resources.getColor(android.R.color.holo_red_dark, null))
-                binding.btnRequestOverlayPermission.visibility = View.VISIBLE // Mostrar el botón si está denegado
+                binding.btnRequestOverlayPermission.visibility = View.VISIBLE
             }
-            // Si es una versión anterior a M, el permiso se otorga al instalar (si está en el manifiesto)
-            // No necesitamos verificarlo aquí o mostrar el botón.
         } else {
             binding.tvOverlayPermissionStatus.text = "Estado: No necesario (Android < M)"
             binding.tvOverlayPermissionStatus.setTextColor(resources.getColor(android.R.color.darker_gray, null))
             binding.btnRequestOverlayPermission.visibility = View.GONE
         }
-
 
         // --- Check WRITE_SETTINGS Permission ---
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -90,14 +93,11 @@ class PermissionsFragment : Fragment() {
                 binding.tvWriteSettingsPermissionStatus.setTextColor(resources.getColor(android.R.color.holo_red_dark, null))
                 binding.btnRequestWriteSettingsPermission.visibility = View.VISIBLE
             }
-            // Si es una versión anterior a M, este permiso no es especial y se otorga con el grupo STORAGE/SYSTEM si se declara.
-            // No necesitamos verificarlo aquí o mostrar el botón.
         } else {
             binding.tvWriteSettingsPermissionStatus.text = "Estado: No necesario (Android < M)"
             binding.tvWriteSettingsPermissionStatus.setTextColor(resources.getColor(android.R.color.darker_gray, null))
             binding.btnRequestWriteSettingsPermission.visibility = View.GONE
         }
-
 
         // --- Check Notification Listener Permission ---
         if (isNotificationListenerEnabled()) {
@@ -109,15 +109,31 @@ class PermissionsFragment : Fragment() {
             binding.tvNotificationListenerPermissionStatus.setTextColor(resources.getColor(android.R.color.holo_red_dark, null))
             binding.btnRequestNotificationListenerPermission.visibility = View.VISIBLE
         }
+
+        // --- Check SCHEDULE_EXACT_ALARM Permission (for API 31+) ---
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) { // S is API 31
+            val alarmManager = requireContext().getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+            if (alarmManager.canScheduleExactAlarms()) {
+                binding.tvExactAlarmPermissionStatus.text = "Estado: Concedido"
+                binding.tvExactAlarmPermissionStatus.setTextColor(resources.getColor(android.R.color.holo_green_dark, null))
+                binding.btnRequestExactAlarmPermission.visibility = View.GONE
+            } else {
+                binding.tvExactAlarmPermissionStatus.text = "Estado: Denegado"
+                binding.tvExactAlarmPermissionStatus.setTextColor(resources.getColor(android.R.color.holo_red_dark, null))
+                binding.btnRequestExactAlarmPermission.visibility = View.VISIBLE
+            }
+        } else {
+            binding.tvExactAlarmPermissionStatus.text = "Estado: No necesario (Android < S)"
+            binding.tvExactAlarmPermissionStatus.setTextColor(resources.getColor(android.R.color.darker_gray, null))
+            binding.btnRequestExactAlarmPermission.visibility = View.GONE
+        }
     }
 
-    // Function to check if notification listener is enabled
     private fun isNotificationListenerEnabled(): Boolean {
         val packageNames =
             Settings.Secure.getString(requireContext().contentResolver, "enabled_notification_listeners")
         return packageNames != null && packageNames.contains(requireContext().packageName)
     }
-
 
     private fun requestOverlayPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -127,8 +143,6 @@ class PermissionsFragment : Fragment() {
             )
             startActivity(intent)
         }
-        // En versiones anteriores a M, el permiso se otorga automáticamente con la declaración en el manifiesto.
-        // No necesitamos hacer nada aquí.
     }
 
     private fun requestWriteSettingsPermission() {
@@ -139,19 +153,25 @@ class PermissionsFragment : Fragment() {
             )
             startActivity(intent)
         }
-        // En versiones anteriores a M, este permiso se otorga con el grupo STORAGE/SYSTEM.
-        // No necesitas hacer nada aquí.
     }
 
     private fun requestNotificationListenerPermission() {
-        // Este intent lleva al usuario a la configuración de Acceso a Notificaciones
         val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
         startActivity(intent)
     }
 
+    // New function to request exact alarm permission
+    private fun requestExactAlarmPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) { // S is API 31
+            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+            intent.data = Uri.fromParts("package", requireContext().packageName, null) // Optional but good practice
+            startActivity(intent)
+        }
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
-        _binding = null // Limpiar la referencia al binding
+        _binding = null
         Timber.d("PermissionsFragment: onDestroyView")
     }
 }

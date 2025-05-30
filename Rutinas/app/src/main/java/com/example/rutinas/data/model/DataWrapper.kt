@@ -13,7 +13,7 @@ import java.time.LocalDateTime // Import if you are storing LocalDateTime
 import java.time.format.DateTimeParseException
 
 @Parcelize
-data class DataWrapper(val data: Map<String, Any> = emptyMap()) : Parcelable {
+data class DataWrapper(val data: Map<String, Any?> = emptyMap()) : Parcelable {
 
     companion object : Parceler<DataWrapper> {
 

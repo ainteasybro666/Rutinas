@@ -157,7 +157,7 @@ class RoutineExecutor @Inject constructor(
         }
     }
 
-    private fun handleAlarmAction(data: Map<String, Any>?) {
+    private fun handleAlarmAction(data: Map<String, Any?>?) {
         Timber.d("RoutineExecutor: handleAlarmAction called with data: $data")
 
         // --- Get data from the DataWrapper ---
@@ -583,7 +583,7 @@ class RoutineExecutor @Inject constructor(
 
 
 
-    private fun handleAnnouncementAction(data: Map<String, Any>?, handler: Handler) {
+    private fun handleAnnouncementAction(data: Map<String, Any?>?, handler: Handler) {
         Timber.d("RoutineExecutor: handleAnnouncementAction called")
         val message = data?.get("message") as? String ?: ""
 
@@ -599,7 +599,7 @@ class RoutineExecutor @Inject constructor(
     }
 
 
-    private fun handleBrightnessAction(data: Map<String, Any>?) {
+    private fun handleBrightnessAction(data: Map<String, Any?>?) {
         Timber.d("RoutineExecutor: handleBrightnessAction called")
         val brightness = (data?.get("brightness") as? Number)?.toInt() ?: 50
         val brightnessInt = (brightness / 100f * 255).toInt() // Convert percentage to 0-255 range
@@ -640,7 +640,7 @@ class RoutineExecutor @Inject constructor(
         }
     }
 
-    private fun handleReadNotificationsAction(data: Map<String, Any>?) {
+    private fun handleReadNotificationsAction(data: Map<String, Any?>?) {
         Timber.d("RoutineExecutor: handleReadNotificationsAction called")
         val excludedPackages = (data?.get("excludedPackages") as? String)
             ?.split(",")
@@ -699,7 +699,7 @@ class RoutineExecutor @Inject constructor(
     }
 
 
-    private fun handleSoundModeAction(data: Map<String, Any>?) {
+    private fun handleSoundModeAction(data: Map<String, Any?>?) {
         Timber.d("RoutineExecutor: handleSoundModeAction called")
         val mode = data?.get("mode") as? String ?: "normal"
 
