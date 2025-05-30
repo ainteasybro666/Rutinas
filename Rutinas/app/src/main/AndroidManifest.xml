@@ -59,13 +59,19 @@
         </service>
 
 
-        <!-- Register the AlarmStopperReceiver -->
+
         <receiver android:name=".receivers.AlarmStopperReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.example.rutinas.action.STOP_ALARM"/>
             </intent-filter>
         </receiver>
+
+        <receiver android:name=".receivers.AlarmReceiver"
+            android:enabled="true"
+            android:exported="true">
+        </receiver>
+
 
     </application>
     <queries>

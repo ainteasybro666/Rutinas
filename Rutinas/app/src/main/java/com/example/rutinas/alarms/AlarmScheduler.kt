@@ -405,20 +405,42 @@ class AlarmScheduler @Inject constructor(
             Timber.e("Time trigger missing minute data for routine ${routine.name}")
             return
         }
-        val frequency = mapData["frequency"] as? String ?: "daily"
 
-        // <<-- NUEVO: Usar LocalDateTime para calcular la próxima ocurrencia -->>
+        // <<< MODIFICACIÓN: Obtenemos la frecuencia y la convertimos directamente al enum >>>
+        // No hay strings de frecuencia desconocidos posibles si provienen del enum.
+        val frequencyString = mapData["frequency"] as? String // Obtenemos el String del mapa
+        val frequency = try {
+            // Intentamos convertir el String a un valor del enum FrequencyType
+            // Si frequencyString es nulo o no coincide, esto lanzará una excepción o resultará en null si usas let
+            frequencyString?.let { FrequencyType.valueOf(it.toUpperCase()) }
+        } catch (e: IllegalArgumentException) {
+            // Si por alguna razón hay un string en la BD que no coincide con el enum (ej. dato viejo o corrupto)
+            Timber.e(e, "Frecuencia de trigger de tiempo no válida en datos: $frequencyString para rutina ${routine.name}. No se programará la alarma.")
+            return // Si la frecuencia es inválida, no podemos programar la alarma, salimos de la función.
+        } ?: run {
+            // Si frequencyString es nulo, tratamos esto como un error de datos y no programamos.
+            Timber.e("Frequency string data is null for routine ${routine.name}. Cannot schedule time trigger.")
+            return
+        }
+        // <<< FIN MODIFICACIÓN >>>
+
+
         val now = LocalDateTime.now()
 
         var nextTriggerTime = now.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
 
         when (frequency) {
-            "daily" -> {
+            FrequencyType.ONCE -> {
+                Timber.d("Calculating next trigger time for ONCE frequency.")
                 if (nextTriggerTime.isBefore(now) || nextTriggerTime.isEqual(now)) {
                     nextTriggerTime = nextTriggerTime.plusDays(1)
+                    Timber.d("ONCE trigger time already passed today. Scheduling for tomorrow.")
+                } else {
+                    Timber.d("ONCE trigger time is in the future today. Scheduling for today.")
                 }
             }
-            "weekly" -> {
+            FrequencyType.WEEKLY -> {
+                Timber.d("Calculating next trigger time for WEEKLY frequency.")
                 val daysOfWeek = mapData["daysOfWeek"] as? List<Int> ?: run {
                     Timber.e("Time trigger (weekly) missing daysOfWeek data for routine ${routine.name}")
                     return
@@ -426,15 +448,13 @@ class AlarmScheduler @Inject constructor(
                 // Convert Room's 0-6 (Sunday-Saturday) to java.time.DayOfWeek (Monday-Sunday)
                 val javaTimeDaysOfWeek = daysOfWeek.map { (it % 7) + 1 }.map { DayOfWeek.of(it) }
 
-                // Find the next target day of the week ON or AFTER the current day/time
                 var foundNext = false
-                // Start checking from today
                 var checkDate = nextTriggerTime
                 if (checkDate.isBefore(now) || checkDate.isEqual(now)) {
-                    checkDate = checkDate.plusDays(1) // If time today is in the past, start checking from tomorrow
+                    checkDate = checkDate.plusDays(1)
                 }
 
-                for (i in 0..7) { // Check up to a week ahead
+                for (i in 0..7) {
                     if (javaTimeDaysOfWeek.contains(checkDate.dayOfWeek)) {
                         nextTriggerTime = checkDate
                         foundNext = true
@@ -444,29 +464,28 @@ class AlarmScheduler @Inject constructor(
                 }
 
                 if (!foundNext) {
-                    Timber.e("Could not find a next weekly trigger day for routine ${routine.name}")
-                    return // Should not happen if daysOfWeek is not empty
+                    Timber.e("Could not find a next weekly trigger day for routine ${routine.name}. This shouldn't happen with valid data.")
+                    return
                 }
+                Timber.d("Next WEEKLY trigger time calculated: $nextTriggerTime")
             }
-            "monthly" -> {
+            FrequencyType.MONTHLY -> {
+                Timber.d("Calculating next trigger time for MONTHLY frequency.")
                 val dayOfMonth = (mapData["dayOfMonth"] as? Number)?.toInt() ?: run {
                     Timber.e("Time trigger (monthly) missing dayOfMonth data for routine ${routine.name}")
                     return
                 }
 
                 try {
-                    nextTriggerTime = nextTriggerTime.withDayOfMonth(dayOfMonth)
+                    nextTriggerTime = now.withHour(hour).withMinute(minute).withSecond(0).withNano(0).withDayOfMonth(dayOfMonth)
                 } catch (e: Exception) {
-                    // Handle cases where the dayOfMonth is invalid for the current month (e.g., 31 in February)
-                    Timber.w(e, "Day $dayOfMonth is invalid for the current month. Adjusting.")
-                    nextTriggerTime = nextTriggerTime.with(TemporalAdjusters.lastDayOfMonth())
+                    Timber.w(e, "Day $dayOfMonth is invalid for the current month. Adjusting to last day.")
+                    nextTriggerTime = now.withHour(hour).withMinute(minute).withSecond(0).withNano(0).with(TemporalAdjusters.lastDayOfMonth())
                 }
 
 
                 if (nextTriggerTime.isBefore(now) || nextTriggerTime.isEqual(now)) {
                     nextTriggerTime = nextTriggerTime.plusMonths(1)
-                    // Re-adjust day of month if it was the last day of the previous month and
-                    // the next month has fewer days.
                     try {
                         nextTriggerTime = nextTriggerTime.withDayOfMonth(dayOfMonth)
                     } catch (e: Exception) {
@@ -474,10 +493,7 @@ class AlarmScheduler @Inject constructor(
                         nextTriggerTime = nextTriggerTime.with(TemporalAdjusters.lastDayOfMonth())
                     }
                 }
-            }
-            else -> {
-                Timber.w("Frecuencia de trigger de tiempo desconocida: $frequency para rutina ${routine.name}")
-                return
+                Timber.d("Next MONTHLY trigger time calculated: $nextTriggerTime")
             }
         }
 
@@ -486,24 +502,18 @@ class AlarmScheduler @Inject constructor(
         val alarmId = generateAlarmId(routine.uuid, trigger.uuid)
         val pendingIntent = createPendingIntent(alarmId, routine.uuid, trigger.uuid)
 
-        Timber.d("Programando alarma de TIEMPO $frequency para ${routine.name} (${hour}:${minute}), próximo disparo: $nextTriggerTime, id: $alarmId")
+        Timber.d("Programando alarma de TIEMPO ${frequency.name} para ${routine.name} (${hour}:${minute}), próximo disparo: $nextTriggerTime, id: $alarmId")
 
-
-        // Use setExact or setWindow
         if (canScheduleExactAlarms()) {
-            // Use setExactAndAllowWhileIdle for potentially more reliable alarms in Doze mode
-            // Be mindful of battery implications. If not critical to be exact, use setExact.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextTriggerMillis, pendingIntent)
             } else {
                 alarmManager.setExact(AlarmManager.RTC_WAKEUP, nextTriggerMillis, pendingIntent)
             }
         } else {
-            // Fallback for devices without exact alarm permission
             alarmManager.setWindow(AlarmManager.RTC_WAKEUP, nextTriggerMillis, 300_000, pendingIntent) // 5-minute window
             Timber.w("Sin permisos para alarmas exactas; usando ventana de 5 minutos para trigger de tiempo.")
         }
-        // <<-- FIN NUEVO -->>
     }
 
     // Function that was likely causing the original suspend error - check its implementation

@@ -38,6 +38,7 @@ class AlarmReceiver : BroadcastReceiver() {
         val serviceIntent = Intent(context, RoutineExecutionService::class.java).apply {
             putExtra(EXTRA_ROUTINE_UUID, uuid)
             putExtra(EXTRA_ALARM_ID, alarmId)
+            putExtra(EXTRA_TRIGGER_UUID, intent.getStringExtra(EXTRA_TRIGGER_UUID)) // Agregar esto
             // Puedes añadir más extras si el servicio los necesita
         }
 
