@@ -26,7 +26,9 @@ import timber.log.Timber
 class EditAlarmActionDialogFragment(listener: ActionDialogListener) : BaseEditActionDialogFragment<FragmentEditAlarmActionBinding>(listener) {
 
     private var selectedAlarmSoundUri: Uri? = null
-    private var selectedVibrationPattern: LongArray? = null // To store custom or selected pattern
+    // TODO: Alarm Action: Implement a proper vibration pattern selection/creation UI.
+    // For now, we'll rely on a simple stored pattern or the system default if none is specified or loaded.
+    private var selectedVibrationPattern: LongArray? = null // To store a custom or selected pattern
 
     // ActivityResultLauncher for Alarm Sound Picker
     private val alarmSoundPickerLauncher = registerForActivityResult(
@@ -44,21 +46,8 @@ class EditAlarmActionDialogFragment(listener: ActionDialogListener) : BaseEditAc
         }
     }
 
-    // ActivityResultLauncher for Vibration Pattern Picker (Less common system picker, might need custom implementation)
-    // This is a placeholder; actual system vibration picker might not be available or work this way.
-    // A custom selection or pattern creation UI might be needed.
-    private val vibrationPatternPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            // Handle result from vibration picker (if a system picker exists and returns data)
-            // This part is highly dependent on the system's implementation.
-            // For now, we'll just log a message.
-            Timber.d("Vibration pattern picker returned with result code: ${result.resultCode}")
-            // You would typically get the selected pattern data here and update the UI
-        }
-    }
-
+    // We remove the explicit vibrationPatternPickerLauncher since we're not using a system picker now.
+    // A custom UI will be needed later if we implement pattern selection.
 
     companion object {
         fun newInstance(action: Action, listener: ActionDialogListener): EditAlarmActionDialogFragment {
@@ -109,20 +98,13 @@ class EditAlarmActionDialogFragment(listener: ActionDialogListener) : BaseEditAc
                 openAlarmSoundPicker()
             }
 
+            // TODO: Alarm Action: Replace this click listener with opening a custom vibration pattern selection/creation UI.
             actvVibrationPattern.setOnClickListener {
-                //openVibrationPatternPicker() // Use this if a system picker is available
-                // Or implement custom vibration pattern selection/creation UI here
-                Timber.d("Vibration Pattern field clicked. Implement vibration pattern selection.")
-                // For now, let's just simulate setting a pattern or clear it
-                if (selectedVibrationPattern == null) {
-                    selectedVibrationPattern = longArrayOf(0, 100, 200, 300) // Example pattern
-                    actvVibrationPattern.setText("Custom Pattern (Example)", false)
-                } else {
-                    selectedVibrationPattern = null
-                    actvVibrationPattern.setText("", false)
-                }
+                Timber.d("Vibration Pattern field clicked. Placeholder for custom vibration pattern selection UI.")
+                // For now, we'll just display a message or a simple indicator
+                binding.actvVibrationPattern.setText("Vibración por defecto", false) // Indicate using default
+                selectedVibrationPattern = null // Ensure no custom pattern is saved for now
             }
-
         }
     }
 
@@ -132,16 +114,6 @@ class EditAlarmActionDialogFragment(listener: ActionDialogListener) : BaseEditAc
         intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Select Alarm Sound")
         intent.putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, selectedAlarmSoundUri)
         alarmSoundPickerLauncher.launch(intent)
-    }
-
-    // Placeholder for opening vibration pattern picker or custom UI
-    private fun openVibrationPatternPicker() {
-        // System vibration picker is not as standardized as sound picker.
-        // You might need to implement your own UI for selecting/creating vibration patterns.
-        Timber.d("Attempting to open vibration pattern picker (System picker may not be available).")
-        // Example of launching an intent, but this might not work on all devices
-        // val intent = Intent(Vibrator.ACTION_VIEW_VIBRATION_PATTERN) // This action might not exist
-        // vibrationPatternPickerLauncher.launch(intent)
     }
 
 
@@ -165,27 +137,21 @@ class EditAlarmActionDialogFragment(listener: ActionDialogListener) : BaseEditAc
                 binding.actvAlarmSound.setText(title, false)
             }
 
-
-            // Load Vibration Pattern (Assuming it's stored as a String representation of LongArray)
-            dataMap["vibrationPattern"]?.let { patternData ->
-                // You'll need to parse the stored data back into a LongArray
-                // This depends on how you choose to store the vibration pattern
-                // For now, we'll just check if data exists and set a placeholder text
-                binding.actvVibrationPattern.setText("Custom Pattern Loaded", false)
-                // If you stored the pattern as a comma-separated string:
+            // TODO: Alarm Action: Properly load and display the saved vibration pattern when the custom UI is implemented.
+            // For now, we'll just check if a pattern was saved and indicate it.
+            dataMap["vibrationPattern"]?.let {
+                Timber.d("EditAlarmActionDialogFragment: Saved vibration pattern found, but not loaded/displayed by current UI.")
+                binding.actvVibrationPattern.setText("Patrón guardado (no visualizable)", false) // Indicate a pattern was saved
+                // Attempt to parse if you still want to keep the internal representation
                 try {
-                    val patternString = patternData.toString().removePrefix("[").removeSuffix("]")
-                    selectedVibrationPattern = patternString.split(",").map { it.trim().toLong() }.toLongArray()
-                    binding.actvVibrationPattern.setText("Custom Pattern Loaded", false) // Update UI to reflect loaded pattern
+                    val patternString = it.toString().removePrefix("[").removeSuffix("]")
+                    selectedVibrationPattern = patternString.split(",").map { value -> value.trim().toLong() }.toLongArray()
                 } catch (e: Exception) {
-                    Timber.e("Error parsing vibration pattern: ${e.message}")
-                    binding.actvVibrationPattern.setText("Error Loading Pattern", false) // Indicate error
+                    Timber.e("Error parsing saved vibration pattern: ${e.message}")
+                    selectedVibrationPattern = null
                 }
-
             } ?: run {
-                // Set a default vibration pattern if none is saved
-                // Or leave it empty and let the system default apply
-                binding.actvVibrationPattern.setText("System Default", false)
+                binding.actvVibrationPattern.setText("Vibración por defecto", false) // Indicate using default
                 selectedVibrationPattern = null // Clear any selected custom pattern
             }
 
@@ -225,7 +191,10 @@ class EditAlarmActionDialogFragment(listener: ActionDialogListener) : BaseEditAc
         // Collect data from the views
         val actionLabel = binding.etAlarmActionLabel.text.toString()
         val alarmSoundUriString = selectedAlarmSoundUri?.toString()
-        val vibrationPatternString = selectedVibrationPattern?.joinToString(",") // Convert LongArray to String
+        // TODO: Alarm Action: Save the selected vibration pattern properly when the custom UI is implemented.
+        // For now, we will not save the selectedVibrationPattern from this UI, relying on the default in RoutineExecutor
+        val vibrationPatternString: String? = null // We are not saving a pattern from this UI for now
+
         val stopOnTap = binding.switchStopOnTap.isChecked
         val onlyVibration = binding.switchOnlyVibration.isChecked
         val ignoreDnd = binding.switchIgnoreDnd.isChecked
@@ -244,9 +213,11 @@ class EditAlarmActionDialogFragment(listener: ActionDialogListener) : BaseEditAc
                 if (alarmSoundUriString != null) {
                     this["alarmSoundUri"] = alarmSoundUriString
                 }
-                if (vibrationPatternString != null) {
-                    this["vibrationPattern"] = vibrationPatternString // Save as String
-                }
+                // TODO: Alarm Action: Include vibrationPatternString here when the custom UI is implemented and saving is desired.
+                // if (vibrationPatternString != null) {
+                //    this["vibrationPattern"] = vibrationPatternString // Save as String
+                // }
+
                 this["stopOnTap"] = stopOnTap.toString()
                 this["onlyVibration"] = onlyVibration.toString()
                 this["ignoreDnd"] = ignoreDnd.toString()

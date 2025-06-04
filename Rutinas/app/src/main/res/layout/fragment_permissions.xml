@@ -144,6 +144,36 @@
         android:background="@android:color/darker_gray"
         android:layout_marginBottom="16dp"/>
 
+    <!-- Permiso de Acceso a Políticas de Notificación (ACCESS_NOTIFICATION_POLICY) -->
+    <TextView
+        android:id="@+id/tvDndPermissionTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Permiso para ignorar 'No Molestar' (Ignorar DND)"
+        android:textSize="18sp"
+        android:layout_marginBottom="4dp"/>
+
+    <TextView
+        android:id="@+id/tvDndPermissionStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Estado: Desconocido"
+        android:layout_marginBottom="8dp"/>
+
+    <Button
+        android:id="@+id/btnRequestDndPermission"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Conceder Permiso"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="16dp"/>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@android:color/darker_gray"
+        android:layout_marginBottom="16dp"/>
+
     <!-- Puedes añadir más permisos importantes aquí -->
 
 </LinearLayout>

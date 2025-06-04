@@ -1,5 +1,6 @@
 package com.example.rutinas.ui.main.fragments
 
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -61,6 +62,11 @@ class PermissionsFragment : Fragment() {
         binding.btnRequestExactAlarmPermission.setOnClickListener {
             Timber.d("PermissionsFragment: 'Request Exact Alarm Permission' button clicked.")
             requestExactAlarmPermission()
+        }
+
+        binding.btnRequestDndPermission.setOnClickListener {
+            Timber.d("PermissionsFragment: 'Request Do Not Disturb Permission' button clicked.")
+            requestNotificationPolicyPermission()
         }
     }
 
@@ -127,6 +133,24 @@ class PermissionsFragment : Fragment() {
             binding.tvExactAlarmPermissionStatus.setTextColor(resources.getColor(android.R.color.darker_gray, null))
             binding.btnRequestExactAlarmPermission.visibility = View.GONE
         }
+
+        // --- Check ACCESS_NOTIFICATION_POLICY Permission (for API 23+) ---
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val notificationManager = requireContext().getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            if (notificationManager?.isNotificationPolicyAccessGranted == true) {
+                binding.tvDndPermissionStatus.text = "Estado: Concedido"
+                binding.tvDndPermissionStatus.setTextColor(resources.getColor(android.R.color.holo_green_dark, null))
+                binding.btnRequestDndPermission.visibility = View.GONE
+            } else {
+                binding.tvDndPermissionStatus.text = "Estado: Denegado"
+                binding.tvDndPermissionStatus.setTextColor(resources.getColor(android.R.color.holo_red_dark, null))
+                binding.btnRequestDndPermission.visibility = View.VISIBLE
+            }
+        } else {
+            binding.tvDndPermissionStatus.text = "Estado: No necesario (Android < M)"
+            binding.tvDndPermissionStatus.setTextColor(resources.getColor(android.R.color.darker_gray, null))
+            binding.btnRequestDndPermission.visibility = View.GONE
+        }
     }
 
     private fun isNotificationListenerEnabled(): Boolean {
@@ -166,6 +190,16 @@ class PermissionsFragment : Fragment() {
             val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
             intent.data = Uri.fromParts("package", requireContext().packageName, null) // Optional but good practice
             startActivity(intent)
+        }
+    }
+
+    private fun requestNotificationPolicyPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+            startActivity(intent)
+        } else {
+            Timber.d("PermissionsFragment: ACCESS_NOTIFICATION_POLICY not needed on API < M.")
+            // Opcional: Mostrar un Toast al usuario informando que no es necesario
         }
     }
 

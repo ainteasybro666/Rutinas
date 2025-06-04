@@ -3,6 +3,7 @@ package com.example.rutinas.actions
 import android.content.Context
 import com.example.rutinas.data.model.Action
 import com.example.rutinas.data.model.ActionType
+import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -12,7 +13,7 @@ import kotlinx.coroutines.delay // Para acciones PAUSE
 @Singleton
 class ActionRunner @Inject constructor(
     // Inyecta las dependencias que las diferentes acciones puedan necesitar
-    private val context: Context
+    @ApplicationContext private val context: Context // Inyectar el contexto de la aplicación
     // ... otras dependencias (ej: para controlar volumen, brillo, etc.)
 ) {
 
@@ -27,11 +28,10 @@ class ActionRunner @Inject constructor(
             Timber.d("ActionRunner: Executing action type: ${action.actionType}")
             when (action.actionType) {
                 ActionType.ALARM -> {
-                    // TODO: Implementar lógica para la acción ALARM
-                    Timber.d("ActionRunner: Executing ALARM action.")
-                    // Necesitarás reproducir un sonido de alarma, vibrar, etc.
-                    // Esto puede requerir interactuar con el sistema de audio/alarma.
-                    // Los datos de la acción (action.data) contendrán la configuración de la alarma.
+                    // La lógica de ALARM ahora se maneja en RoutineExecutor
+                    Timber.d("ActionRunner: Delegating ALARM action execution to RoutineExecutor.")
+                    // Aquí podrías llamar a una función en RoutineExecutor si es necesario
+                    // For example: RoutineExecutor.getInstance(context).executeAlarmAction(action)
                 }
                 ActionType.ANNOUNCEMENT -> {
                     // TODO: Implementar lógica para la acción ANNOUNCEMENT
@@ -46,10 +46,7 @@ class ActionRunner @Inject constructor(
                     // Los datos de la acción contendrán el nivel de brillo.
                 }
                 ActionType.PAUSE -> {
-                    // TODO: Implementar lógica para la acción PAUSE
                     Timber.d("ActionRunner: Executing PAUSE action.")
-                    // Pausar la ejecución por un tiempo. Usar delay() de corrutinas.
-                    // Los datos de la acción contendrán la duración de la pausa.
                     val pauseDuration = action.pauseDuration ?: 0L // Duración en milisegundos
                     if (pauseDuration > 0) {
                         Timber.d("ActionRunner: Pausing for $pauseDuration ms.")
@@ -88,5 +85,6 @@ class ActionRunner @Inject constructor(
             }
         }
         Timber.d("ActionRunner: Finished running actions.")
+        // Eliminar llamadas a stopAlarm() y stopVibration() aquí, RoutineExecutor las maneja
     }
 }

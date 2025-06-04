@@ -15,8 +15,6 @@ import com.example.rutinas.ui.edit.ActionDialogListener
 import timber.log.Timber
 
 //Eliminar @AndroidEntryPoint de aquí
-// @AndroidEntryPoint
-// Cambiar de vuelta a T : ViewBinding
 abstract class BaseEditActionDialogFragment<T : ViewBinding>(protected val listener: ActionDialogListener) : DialogFragment() {
 
     // To avoid showing the error dialog multiple times.
